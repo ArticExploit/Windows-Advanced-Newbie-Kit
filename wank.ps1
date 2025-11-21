@@ -1,4 +1,3 @@
-# --- Ensure script is running as administrator ---
 if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Write-Host ""
     Write-Host "Restarting script as administrator..." -ForegroundColor Yellow
@@ -47,9 +46,11 @@ function Show-NetworkMenu {
     Write-Host "   [1] Flush DNS"
     Write-Host "   [2] Show IP Config"
     Write-Host "   [3] Open Advanced Firewall"
+    Write-Host "   [4] Export Wi-Fi Profiles"
+    Write-Host "   [5] Import Wi-Fi Profiles"
     Write-Host "   [0] Back"
     Write-Host ""
-    Write-Host "Choose a menu option using your keyboard [1-3,0] : " -NoNewline
+    Write-Host "Choose a menu option using your keyboard [1-5,0] : " -NoNewline
 }
 
 function Show-SystemMenu {
@@ -65,7 +66,6 @@ function Show-SystemMenu {
     Write-Host ""
     Write-Host "Choose a menu option using your keyboard [1-7,0] : " -NoNewline
 }
-
 
 function Show-PrinterMenu {
     Show-Header "Printer"
@@ -405,6 +405,233 @@ function Set-ServicesRecommended {
     Pause
 }
 
+# --- Network: Wi-Fi profile export/import helpers ---
+
+function Get-DefaultExportFolder {
+    <#
+    .SYNOPSIS
+      Constructs a default export folder on the user's Desktop with a timestamp.
+    #>
+    try {
+        $desktop = [Environment]::GetFolderPath("Desktop")
+        $stamp = (Get-Date).ToString("yyyyMMdd-HHmmss")
+        return (Join-Path $desktop "WiFi-Profiles-$stamp")
+    } catch {
+        # Fallback to C:\Temp if Desktop is not resolvable
+        $fallback = "C:\Temp\WiFi-Profiles-" + (Get-Date).ToString("yyyyMMdd-HHmmss")
+        return $fallback
+    }
+}
+
+function Confirm-YesNo($Prompt, [bool]$DefaultYes=$true) {
+    <#
+    .SYNOPSIS
+      Simple Y/N prompt that returns $true for Yes, $false for No.
+    .PARAMETER Prompt
+      Message shown to user.
+    .PARAMETER DefaultYes
+      If the user presses Enter, default is Yes when true, No when false.
+    #>
+    $suffix = if ($DefaultYes) { " [Y/n]" } else { " [y/N]" }
+    while ($true) {
+        Write-Host "$Prompt$suffix " -NoNewline -ForegroundColor Yellow
+        $resp = Read-Host
+        if ([string]::IsNullOrWhiteSpace($resp)) { return $DefaultYes }
+        switch ($resp.Trim().ToLowerInvariant()) {
+            "y" { return $true }
+            "yes" { return $true }
+            "n" { return $false }
+            "no" { return $false }
+            default { Write-Host "Please answer 'y' or 'n'." -ForegroundColor DarkYellow }
+        }
+    }
+}
+
+function Ensure-Folder($Path) {
+    <#
+    .SYNOPSIS
+      Ensures a folder exists, creating it if necessary.
+    .RETURNS
+      The full, resolved path string if successful; $null otherwise.
+    #>
+    try {
+        if (-not (Test-Path -Path $Path -PathType Container)) {
+            New-Item -ItemType Directory -Path $Path -Force | Out-Null
+        }
+        $resolved = (Resolve-Path -Path $Path).Path
+        return $resolved
+    } catch {
+        Write-Host "Failed to create or access folder: $Path`n$_" -ForegroundColor Red
+        return $null
+    }
+}
+
+function Export-WiFiProfiles {
+    <#
+    .SYNOPSIS
+      Exports all Wi-Fi profiles to a chosen folder using 'netsh wlan export profile'.
+    .DESCRIPTION
+      - Optionally includes key material (passwords) if the user confirms.
+      - Exports all profiles at once (avoids locale-dependent parsing).
+      - Writes one XML file per profile into the destination folder.
+    .SECURITY
+      Including keys writes readable credentials into XML files. Handle securely.
+    #>
+    Write-Host ""
+    Write-Host "Exporting Wi-Fi profiles..." -ForegroundColor Cyan
+
+    $includeKeys = Confirm-YesNo -Prompt "Include Wi-Fi passwords in exported XML (key=clear)? This writes readable credentials to disk." -DefaultYes:$false
+
+    # Ask for destination folder with default suggestion
+    $defaultFolder = Get-DefaultExportFolder
+    Write-Host "Enter destination folder for exported profiles (Press Enter to use default):" -ForegroundColor Yellow
+    Write-Host "Default: $defaultFolder" -ForegroundColor DarkGray
+    Write-Host "> " -NoNewline
+    $dest = Read-Host
+    if ([string]::IsNullOrWhiteSpace($dest)) {
+        $dest = $defaultFolder
+    }
+
+    $dest = Ensure-Folder -Path $dest
+    if (-not $dest) { Pause; return }
+
+    # Track existing XML files to count newly exported files reliably
+    $preExisting = @()
+    try {
+        if (Test-Path -Path $dest) {
+            $preExisting = Get-ChildItem -Path $dest -Filter *.xml -File -ErrorAction SilentlyContinue
+        }
+    } catch { }
+
+    # Build netsh command
+    $args = @('wlan','export','profile',"folder=""$dest""")
+    if ($includeKeys) {
+        $args += 'key=clear'
+    }
+
+    try {
+        # Call netsh directly to export all profiles
+        & netsh @args | Out-Null
+        $exit = $LASTEXITCODE
+        if ($exit -ne 0) {
+            Write-Host "netsh returned a non-zero exit code: $exit" -ForegroundColor Red
+        }
+    } catch {
+        Write-Host "Failed to run netsh: $_" -ForegroundColor Red
+        Pause
+        return
+    }
+
+    # Count new files
+    $postFiles = @()
+    try {
+        $postFiles = Get-ChildItem -Path $dest -Filter *.xml -File -ErrorAction SilentlyContinue
+    } catch { }
+
+    # Compute newly created
+    $newFiles = $postFiles | Where-Object { $preExisting -notcontains $_ }
+    $newCount = if ($newFiles) { $newFiles.Count } else { 0 }
+
+    if ($newCount -gt 0) {
+        Write-Host "Export completed. $newCount profile XML file(s) saved to:" -ForegroundColor Green
+        Write-Host "  $dest" -ForegroundColor Green
+        if ($includeKeys) {
+            Write-Host "WARNING: Export includes passwords. Store the files securely and delete when done." -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "No new Wi-Fi profile XML files were created. Profiles may not exist or an error occurred." -ForegroundColor Yellow
+        Write-Host "Check the destination folder: $dest" -ForegroundColor Yellow
+    }
+
+    Pause
+}
+
+function Import-WiFiProfiles {
+    <#
+    .SYNOPSIS
+      Imports Wi-Fi profiles from XML files in a specified folder using 'netsh wlan add profile'.
+    .DESCRIPTION
+      - Imports all *.xml files in the folder.
+      - User can choose to import for 'All users' (requires admin) or 'Current user'.
+    .NOTES
+      - Conflicting or duplicate profiles may be overwritten by netsh as appropriate.
+    #>
+    Write-Host ""
+    Write-Host "Importing Wi-Fi profiles from XML..." -ForegroundColor Cyan
+
+    # Ask for source folder
+    Write-Host "Enter folder path containing exported Wi-Fi profile XML files (*.xml):" -ForegroundColor Yellow
+    Write-Host "> " -NoNewline
+    $src = Read-Host
+
+    if ([string]::IsNullOrWhiteSpace($src)) {
+        Write-Host "No folder specified. Import cancelled." -ForegroundColor Yellow
+        Pause
+        return
+    }
+
+    try {
+        $srcResolved = (Resolve-Path -Path $src -ErrorAction Stop).Path
+    } catch {
+        Write-Host "Folder not found: $src" -ForegroundColor Red
+        Pause
+        return
+    }
+
+    try {
+        $xmlFiles = Get-ChildItem -Path $srcResolved -Filter *.xml -File -ErrorAction Stop
+    } catch {
+        Write-Host "Failed to enumerate XML files in: $srcResolved`n$_" -ForegroundColor Red
+        Pause
+        return
+    }
+
+    if (-not $xmlFiles -or $xmlFiles.Count -eq 0) {
+        Write-Host "No XML files found in: $srcResolved" -ForegroundColor Yellow
+        Pause
+        return
+    }
+
+    $allUsers = Confirm-YesNo -Prompt "Import profiles for ALL users (recommended, requires admin)? Choose 'No' for current user only." -DefaultYes:$true
+    $userScope = if ($allUsers) { 'all' } else { 'current' }
+
+    $success = 0
+    $failed = 0
+    $failures = @()
+
+    foreach ($file in $xmlFiles) {
+        try {
+            & netsh wlan add profile filename="$($file.FullName)" "user=$userScope" | Out-Null
+            $exit = $LASTEXITCODE
+            if ($exit -eq 0) {
+                $success++
+                Write-Host "Imported: $($file.Name)" -ForegroundColor Green
+            } else {
+                $failed++
+                $failures += "[$exit] $($file.FullName)"
+                Write-Host "Failed (code $exit): $($file.Name)" -ForegroundColor Yellow
+            }
+        } catch {
+            $failed++
+            $failures += "[EXCEPTION] $($file.FullName) :: $_"
+            Write-Host "Exception importing $($file.Name): $_" -ForegroundColor Red
+        }
+    }
+
+    Write-Host ""
+    Write-Host "Import summary:" -ForegroundColor Cyan
+    Write-Host "  Success: $success" -ForegroundColor Green
+    Write-Host "  Failed : $failed" -ForegroundColor Yellow
+    if ($failed -gt 0) {
+        Write-Host "  Failed items:" -ForegroundColor Yellow
+        foreach ($f in $failures) {
+            Write-Host "    - $f" -ForegroundColor Yellow
+        }
+    }
+
+    Pause
+}
+
 # --- Commands for each category ---
 
 function Flush-DNS {
@@ -576,7 +803,7 @@ do {
                 $choice = $null
                 while ($null -eq $choice) {
                     $input = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").Character
-                    if ($input -match '^[0-3]$') {
+                    if ($input -match '^[0-5]$') {
                         $choice = $input
                     }
                 }
@@ -584,6 +811,8 @@ do {
                     "1" { Flush-DNS }
                     "2" { Show-IPConfig }
                     "3" { Open-AdvancedFirewall }
+                    "4" { Export-WiFiProfiles }
+                    "5" { Import-WiFiProfiles }
                     "0" { $exitMenu = $true }
                 }
             } while (-not $exitMenu)
