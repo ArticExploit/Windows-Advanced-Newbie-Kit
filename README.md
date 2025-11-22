@@ -7,6 +7,5 @@ irm https://wank.artic.sh | iex
 ```
 
 ## TO DO
-- Scanner setup (scan folder with perms, enable smb, show host pc name)
 - Set Desktop Icons
 - mbr2gpt
