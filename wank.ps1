@@ -1,5 +1,5 @@
 if (!([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Write-Output "Windows-Advanced-Newbie-Kit needs to be run as Administrator. Attempting to relaunch."
+    Write-Output "Winutil needs to be run as Administrator. Attempting to relaunch."
     $argList = @()
 
     $PSBoundParameters.GetEnumerator() | ForEach-Object {
@@ -82,15 +82,16 @@ function Show-SystemMenu {
     Write-Host "   [7] Set Services to Recommended Startup"
     Write-Host "   [0] Back"
     Write-Host ""
-    Write-Host "Choose a menu option using your keyboard [1-7,0] : " -NoNewline
+    Write-Host "Choose a menu option using your keyboard [1-8,0] : " -NoNewline
 }
 
 function Show-PrinterMenu {
     Show-Header "Printer"
     Write-Host "   [1] Restart Spooler Service"
+    Write-Host "   [2] Setup Scanner SMB Share"
     Write-Host "   [0] Back"
     Write-Host ""
-    Write-Host "Choose a menu option using your keyboard [1,0] : " -NoNewline
+    Write-Host "Choose a menu option using your keyboard [1-2,0] : " -NoNewline
 }
 
 function Show-DiskMenu {
@@ -423,7 +424,6 @@ function Set-ServicesRecommended {
     Pause
 }
 
-# --- Network: Wi-Fi profile export/import helpers ---
 
 function Get-DefaultExportFolder {
     <#
@@ -802,6 +802,242 @@ function Clean-TempFiles {
     Pause
 }
 
+function Get-ActiveUserDesktopPath {
+    <#
+    .SYNOPSIS
+      Tries to resolve the Desktop path of the currently signed-in interactive user,
+      even when running elevated as Administrator.
+    #>
+    try {
+        $sessionUser = (Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).UserName
+        if ([string]::IsNullOrWhiteSpace($sessionUser)) {
+            return [Environment]::GetFolderPath("Desktop")
+        }
+        $userNameOnly = $sessionUser.Split('\')[-1]
+        $candidate = Join-Path "C:\Users\$userNameOnly" "Desktop"
+        if (Test-Path -Path $candidate -PathType Container) {
+            return $candidate
+        } else {
+            return [Environment]::GetFolderPath("Desktop")
+        }
+    } catch {
+        return [Environment]::GetFolderPath("Desktop")
+    }
+}
+
+function Setup-ScannerShare {
+    Write-Host ""
+    Write-Host "Setup Scanner SMB share (default user/password: scanner/scanner)" -ForegroundColor Cyan
+
+    # Prompt for username (default: scanner)
+    $inputUser = Read-Host -Prompt "Enter username for scanner account (Press Enter for default 'scanner')"
+    if ([string]::IsNullOrWhiteSpace($inputUser)) {
+        $userName = "scanner"
+    } else {
+        $userName = $inputUser.Trim()
+    }
+
+    # Prompt for password (hidden). Use default 'scanner' if the user presses Enter.
+    Write-Host "Enter password for user '$userName' (Press Enter for default 'scanner'):" -ForegroundColor Yellow
+    $pwdSecure = Read-Host -AsSecureString -Prompt "(input hidden)"
+    # Convert SecureString to plain to detect emptiness; free BSTR afterwards
+    $pwdPlain = ""
+    if ($pwdSecure -ne $null) {
+        try {
+            $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($pwdSecure)
+            $pwdPlain = [Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+        } catch {
+            $pwdPlain = ""
+        } finally {
+            if ($bstr) { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr) }
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($pwdPlain)) {
+        $passwordPlain = "scanner"
+        $pwdSecure = ConvertTo-SecureString $passwordPlain -AsPlainText -Force
+    } else {
+        $passwordPlain = $pwdPlain
+        # $pwdSecure is already set
+    }
+
+    $localQualified = "$env:COMPUTERNAME\$userName"
+
+    # 1) Ensure local user exists; create or optionally reset password
+    try {
+        $existing = $null
+        try { $existing = Get-LocalUser -Name $userName -ErrorAction Stop } catch { $existing = $null }
+
+        if (-not $existing) {
+            Write-Host "Creating local user '$userName'..." -ForegroundColor Yellow
+            if (Get-Command New-LocalUser -ErrorAction SilentlyContinue) {
+                New-LocalUser -Name $userName -Password $pwdSecure -PasswordNeverExpires:$true -UserMayNotChangePassword:$true -AccountNeverExpires:$true | Out-Null
+                try { Add-LocalGroupMember -Group "Users" -Member $userName -ErrorAction SilentlyContinue } catch {}
+            } else {
+                # Fallback to net user
+                $escapedPwd = $passwordPlain.Replace('"','\"')
+                cmd /c "net user `"$userName`" `"$escapedPwd`" /add" | Out-Null
+                cmd /c "net localgroup Users `"$userName`" /add" | Out-Null
+            }
+            Write-Host "User '$userName' created." -ForegroundColor Green
+        } else {
+            Write-Host "User '$userName' already exists." -ForegroundColor DarkYellow
+            $reset = Confirm-YesNo -Prompt "Reset the password for '$userName' to the value you entered?" -DefaultYes:$false
+            if ($reset) {
+                try {
+                    if (Get-Command Set-LocalUser -ErrorAction SilentlyContinue) {
+                        Set-LocalUser -Name $userName -Password $pwdSecure -ErrorAction Stop
+                    } else {
+                        $escapedPwd = $passwordPlain.Replace('"','\"')
+                        cmd /c "net user `"$userName`" `"$escapedPwd`"" | Out-Null
+                    }
+                    Write-Host "Password for '$userName' updated." -ForegroundColor Green
+                } catch {
+                    Write-Host "Failed to update password: $_" -ForegroundColor Red
+                    Pause
+                    return
+                }
+            } else {
+                Write-Host "Left existing password unchanged." -ForegroundColor DarkYellow
+            }
+        }
+    } catch {
+        Write-Host "Failed to ensure user '$userName': $_" -ForegroundColor Red
+        Pause
+        return
+    }
+
+    # 2) Create scan folder on active user's Desktop
+    try {
+        $desktop = Get-ActiveUserDesktopPath
+        $scanPath = Join-Path $desktop "scan"
+        if (-not (Test-Path -Path $scanPath -PathType Container)) {
+            New-Item -ItemType Directory -Path $scanPath -Force | Out-Null
+            Write-Host "Created folder: $scanPath" -ForegroundColor Green
+        } else {
+            Write-Host "Folder already exists: $scanPath" -ForegroundColor DarkYellow
+        }
+    } catch {
+        Write-Host "Failed to create/access scan folder: $_" -ForegroundColor Red
+        Pause
+        return
+    }
+
+    # 3) Enable Server service and open firewall rules; try enabling SMB1 for legacy devices
+    try {
+        Set-Service -Name LanmanServer -StartupType Automatic -ErrorAction SilentlyContinue
+        Start-Service -Name LanmanServer -ErrorAction SilentlyContinue
+
+        if (Get-Command Enable-NetFirewallRule -ErrorAction SilentlyContinue) {
+            Enable-NetFirewallRule -DisplayGroup "File and Printer Sharing" -ErrorAction SilentlyContinue | Out-Null
+        }
+
+        Write-Host "Attempting to enable SMB 1.0/CIFS feature (no restart forced)..." -ForegroundColor Yellow
+        $dism = Start-Process -FilePath dism.exe -ArgumentList "/online","/enable-feature","/featurename:SMB1Protocol","/All","/NoRestart" -PassThru -Wait -WindowStyle Hidden
+        if ($dism.ExitCode -eq 0 -or $dism.ExitCode -eq 3010) {
+            Write-Host "SMB1 feature enable attempt returned exit code $($dism.ExitCode)." -ForegroundColor Green
+        } else {
+            Write-Host "DISM returned code $($dism.ExitCode) while enabling SMB1. Proceeding." -ForegroundColor DarkYellow
+        }
+    } catch {
+        Write-Host "Warning: enabling SMB components failed or partially failed: $_" -ForegroundColor Yellow
+    }
+
+    # 4) NTFS permissions: grant Modify to the specified user (so Windows shows Read/Write)
+    try {
+        $targetAccount = $localQualified
+        # Use grant:r to replace existing explicit ACE for that account; use $() to avoid parsing issues
+        $icaclsCmd = "icacls"
+        $grantArg = "$($targetAccount):(OI)(CI)M"
+        $icaclsResult = & $icaclsCmd "$scanPath" /grant:r $grantArg /T /C 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            # Fallback to unqualified name
+            $grantArg2 = "$($userName):(OI)(CI)M"
+            $icaclsResult = & $icaclsCmd "$scanPath" /grant:r $grantArg2 /T /C 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "icacls returned non-zero, output:`n$icaclsResult" -ForegroundColor Yellow
+            }
+        }
+        Write-Host "Granted NTFS Modify (Read/Write) to '$userName' on $scanPath." -ForegroundColor Green
+    } catch {
+        Write-Host "Failed to set NTFS permissions: $_" -ForegroundColor Red
+        Pause
+        return
+    }
+
+    # 5) Create/update SMB share with Full access (share-level Full Control) for the user and Full for Administrators
+    try {
+        $shareName = "scan"
+        $smbModuleLoaded = $false
+        try {
+            Import-Module SmbShare -ErrorAction Stop
+            $smbModuleLoaded = $true
+        } catch {
+            $smbModuleLoaded = $false
+        }
+
+        if ($smbModuleLoaded) {
+            $existingShare = Get-SmbShare -Name $shareName -ErrorAction SilentlyContinue
+            if ($existingShare) {
+                if ($existingShare.Path -ne $scanPath) {
+                    Write-Host "Existing share '$shareName' points to a different path. Recreating..." -ForegroundColor Yellow
+                    Remove-SmbShare -Name $shareName -Force -ErrorAction SilentlyContinue
+                    $existingShare = $null
+                }
+            }
+
+            if (-not $existingShare) {
+                # Create share granting Full access to the specified user
+                New-SmbShare -Name $shareName -Path $scanPath -FullAccess $localQualified -ErrorAction Stop | Out-Null
+
+                # Clean broad groups to keep UI simple
+                Revoke-SmbShareAccess -Name $shareName -AccountName "Everyone" -Force -ErrorAction SilentlyContinue
+                Revoke-SmbShareAccess -Name $shareName -AccountName "Users" -Force -ErrorAction SilentlyContinue
+                Revoke-SmbShareAccess -Name $shareName -AccountName "Authenticated Users" -Force -ErrorAction SilentlyContinue
+
+                # Ensure Administrators retain Full
+                Grant-SmbShareAccess -Name $shareName -AccountName "Administrators" -AccessRight Full -Force -ErrorAction SilentlyContinue | Out-Null
+
+                Write-Host "Created SMB share '$shareName' for $scanPath granting Full Control (share-level) to $userName." -ForegroundColor Green
+            } else {
+                # Normalize permissions: remove broad groups and grant Full to user & admins
+                Revoke-SmbShareAccess -Name $shareName -AccountName "Everyone" -Force -ErrorAction SilentlyContinue
+                Revoke-SmbShareAccess -Name $shareName -AccountName "Users" -Force -ErrorAction SilentlyContinue
+                Revoke-SmbShareAccess -Name $shareName -AccountName "Authenticated Users" -Force -ErrorAction SilentlyContinue
+
+                Grant-SmbShareAccess -Name $shareName -AccountName $localQualified -AccessRight Full -Force -ErrorAction SilentlyContinue | Out-Null
+                Grant-SmbShareAccess -Name $shareName -AccountName "Administrators" -AccessRight Full -Force -ErrorAction SilentlyContinue | Out-Null
+
+                Write-Host "Updated SMB share '$shareName' permissions to grant Full Control (share-level) to $userName." -ForegroundColor Green
+            }
+        } else {
+            # net share fallback: delete existing and recreate with FULL for user and FULL for Administrators
+            $existing = (& net share $shareName) 2>$null
+            if ($LASTEXITCODE -eq 0 -and $existing) {
+                cmd /c "net share $shareName /delete /y" | Out-Null
+            }
+            $escapedPath = $scanPath.Replace('"','\"')
+            $escapedUser = $userName.Replace('"','\"')
+            # net share syntax: /GRANT:user,PERM
+            cmd /c "net share `"$shareName`"=`"$escapedPath`" /GRANT:$escapedUser,FULL /GRANT:Administrators,FULL /REMARK:`"Scanner share`"" | Out-Null
+            Write-Host "Created SMB share '$shareName' (via net share) for $scanPath granting Full Control (share-level) to $userName." -ForegroundColor Green
+        }
+    } catch {
+        Write-Host "Failed to create/update SMB share: $_" -ForegroundColor Red
+        Pause
+        return
+    }
+
+    Write-Host ""
+    Write-Host "Scanner SMB share setup completed." -ForegroundColor Cyan
+    Write-Host "Details:" -ForegroundColor Cyan
+    Write-Host "  User      : $userName (password: $passwordPlain)" -ForegroundColor Green
+    Write-Host "  Folder    : $scanPath" -ForegroundColor Green
+    Write-Host "  Share name: scan  (\\$env:COMPUTERNAME\scan)" -ForegroundColor Green
+    Write-Host "  Permissions: Share=Full Control (share-level); NTFS=Modify (Read/Write)" -ForegroundColor Green
+    Pause
+}
+
+
 # --- Main Menu Loop ---
 
 do {
@@ -865,12 +1101,13 @@ do {
                 $choice = $null
                 while ($null -eq $choice) {
                     $input = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").Character
-                    if ($input -match '^[0-1]$') {
+                    if ($input -match '^[0-2]$') {
                         $choice = $input
                     }
                 }
                 switch ($choice) {
                     "1" { Restart-Spooler }
+                    "2" { Setup-ScannerShare }
                     "0" { $exitMenu = $true }
                 }
             } while (-not $exitMenu)
