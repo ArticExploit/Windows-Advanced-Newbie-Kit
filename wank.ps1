@@ -109,330 +109,418 @@ function Show-DebloatMenu {
     Show-Header "Debloat"
     Write-Host "   [1] Set Services to Recommended Startup"
     Write-Host "   [2] Disable Telemetry"
+    Write-Host "   [3] Debloat Edge"
     Write-Host "   [0] Back"
     Write-Host ""
-    Write-Host "Choose a menu option using your keyboard [1-2,0] : " -NoNewline
+    Write-Host "Choose a menu option using your keyboard [1-3,0] : " -NoNewline
 }
 
 function Set-ServicesRecommended {
+    [CmdletBinding()]
+    param()
+
     Write-Host ""
-    Write-Host "Setting services to recommended startup types..." -ForegroundColor Yellow
-
-    $services = @(
-        @{Name="AJRouter";StartupType="Disabled"}
-        @{Name="ALG";StartupType="Manual"}
-        @{Name="AppIDSvc";StartupType="Manual"}
-        @{Name="AppMgmt";StartupType="Manual"}
-        @{Name="AppReadiness";StartupType="Manual"}
-        @{Name="AppVClient";StartupType="Disabled"}
-        @{Name="AppXSvc";StartupType="Manual"}
-        @{Name="Appinfo";StartupType="Manual"}
-        @{Name="AssignedAccessManagerSvc";StartupType="Disabled"}
-        @{Name="AudioEndpointBuilder";StartupType="Automatic"}
-        @{Name="AudioSrv";StartupType="Automatic"}
-        @{Name="Audiosrv";StartupType="Automatic"}
-        @{Name="AxInstSV";StartupType="Manual"}
-        @{Name="BDESVC";StartupType="Manual"}
-        @{Name="BFE";StartupType="Automatic"}
-        @{Name="BITS";StartupType="AutomaticDelayedStart"}
-        @{Name="BTAGService";StartupType="Manual"}
-        @{Name="BcastDVRUserService_*";StartupType="Manual"}
-        @{Name="BluetoothUserService_*";StartupType="Manual"}
-        @{Name="BrokerInfrastructure";StartupType="Automatic"}
-        @{Name="Browser";StartupType="Manual"}
-        @{Name="BthAvctpSvc";StartupType="Automatic"}
-        @{Name="BthHFSrv";StartupType="Automatic"}
-        @{Name="CDPSvc";StartupType="Manual"}
-        @{Name="CDPUserSvc_*";StartupType="Automatic"}
-        @{Name="COMSysApp";StartupType="Manual"}
-        @{Name="CaptureService_*";StartupType="Manual"}
-        @{Name="CertPropSvc";StartupType="Manual"}
-        @{Name="ClipSVC";StartupType="Manual"}
-        @{Name="ConsentUxUserSvc_*";StartupType="Manual"}
-        @{Name="CoreMessagingRegistrar";StartupType="Automatic"}
-        @{Name="CredentialEnrollmentManagerUserSvc_*";StartupType="Manual"}
-        @{Name="CryptSvc";StartupType="Automatic"}
-        @{Name="CscService";StartupType="Manual"}
-        @{Name="DPS";StartupType="Automatic"}
-        @{Name="DcomLaunch";StartupType="Automatic"}
-        @{Name="DcpSvc";StartupType="Manual"}
-        @{Name="DevQueryBroker";StartupType="Manual"}
-        @{Name="DeviceAssociationBrokerSvc_*";StartupType="Manual"}
-        @{Name="DeviceAssociationService";StartupType="Manual"}
-        @{Name="DeviceInstall";StartupType="Manual"}
-        @{Name="DevicePickerUserSvc_*";StartupType="Manual"}
-        @{Name="DevicesFlowUserSvc_*";StartupType="Manual"}
-        @{Name="Dhcp";StartupType="Automatic"}
-        @{Name="DiagTrack";StartupType="Disabled"}
-        @{Name="DialogBlockingService";StartupType="Disabled"}
-        @{Name="DispBrokerDesktopSvc";StartupType="Automatic"}
-        @{Name="DisplayEnhancementService";StartupType="Manual"}
-        @{Name="DmEnrollmentSvc";StartupType="Manual"}
-        @{Name="Dnscache";StartupType="Automatic"}
-        @{Name="DoSvc";StartupType="AutomaticDelayedStart"}
-        @{Name="DsSvc";StartupType="Manual"}
-        @{Name="DsmSvc";StartupType="Manual"}
-        @{Name="DusmSvc";StartupType="Automatic"}
-        @{Name="EFS";StartupType="Manual"}
-        @{Name="EapHost";StartupType="Manual"}
-        @{Name="EntAppSvc";StartupType="Manual"}
-        @{Name="EventLog";StartupType="Automatic"}
-        @{Name="EventSystem";StartupType="Automatic"}
-        @{Name="FDResPub";StartupType="Manual"}
-        @{Name="Fax";StartupType="Manual"}
-        @{Name="FontCache";StartupType="Automatic"}
-        @{Name="FrameServer";StartupType="Manual"}
-        @{Name="FrameServerMonitor";StartupType="Manual"}
-        @{Name="GraphicsPerfSvc";StartupType="Manual"}
-        @{Name="HomeGroupListener";StartupType="Manual"}
-        @{Name="HomeGroupProvider";StartupType="Manual"}
-        @{Name="HvHost";StartupType="Manual"}
-        @{Name="IEEtwCollectorService";StartupType="Manual"}
-        @{Name="IKEEXT";StartupType="Manual"}
-        @{Name="InstallService";StartupType="Manual"}
-        @{Name="InventorySvc";StartupType="Manual"}
-        @{Name="IpxlatCfgSvc";StartupType="Manual"}
-        @{Name="KeyIso";StartupType="Automatic"}
-        @{Name="KtmRm";StartupType="Manual"}
-        @{Name="LSM";StartupType="Automatic"}
-        @{Name="LanmanServer";StartupType="Automatic"}
-        @{Name="LanmanWorkstation";StartupType="Automatic"}
-        @{Name="LicenseManager";StartupType="Manual"}
-        @{Name="LxpSvc";StartupType="Manual"}
-        @{Name="MSDTC";StartupType="Manual"}
-        @{Name="MSiSCSI";StartupType="Manual"}
-        @{Name="MapsBroker";StartupType="AutomaticDelayedStart"}
-        @{Name="McpManagementService";StartupType="Manual"}
-        @{Name="MessagingService_*";StartupType="Manual"}
-        @{Name="MicrosoftEdgeElevationService";StartupType="Manual"}
-        @{Name="MixedRealityOpenXRSvc";StartupType="Manual"}
-        @{Name="MpsSvc";StartupType="Automatic"}
-        @{Name="MsKeyboardFilter";StartupType="Manual"}
-        @{Name="NPSMSvc_*";StartupType="Manual"}
-        @{Name="NaturalAuthentication";StartupType="Manual"}
-        @{Name="NcaSvc";StartupType="Manual"}
-        @{Name="NcbService";StartupType="Manual"}
-        @{Name="NcdAutoSetup";StartupType="Manual"}
-        @{Name="NetSetupSvc";StartupType="Manual"}
-        @{Name="NetTcpPortSharing";StartupType="Disabled"}
-        @{Name="Netlogon";StartupType="Automatic"}
-        @{Name="Netman";StartupType="Manual"}
-        @{Name="NgcCtnrSvc";StartupType="Manual"}
-        @{Name="NgcSvc";StartupType="Manual"}
-        @{Name="NlaSvc";StartupType="Manual"}
-        @{Name="OneSyncSvc_*";StartupType="Automatic"}
-        @{Name="P9RdrService_*";StartupType="Manual"}
-        @{Name="PNRPAutoReg";StartupType="Manual"}
-        @{Name="PNRPsvc";StartupType="Manual"}
-        @{Name="PcaSvc";StartupType="Manual"}
-        @{Name="PeerDistSvc";StartupType="Manual"}
-        @{Name="PenService_*";StartupType="Manual"}
-        @{Name="PerfHost";StartupType="Manual"}
-        @{Name="PhoneSvc";StartupType="Manual"}
-        @{Name="PimIndexMaintenanceSvc_*";StartupType="Manual"}
-        @{Name="PlugPlay";StartupType="Manual"}
-        @{Name="PolicyAgent";StartupType="Manual"}
-        @{Name="Power";StartupType="Automatic"}
-        @{Name="PrintNotify";StartupType="Manual"}
-        @{Name="PrintWorkflowUserSvc_*";StartupType="Manual"}
-        @{Name="ProfSvc";StartupType="Automatic"}
-        @{Name="PushToInstall";StartupType="Manual"}
-        @{Name="QWAVE";StartupType="Manual"}
-        @{Name="RasAuto";StartupType="Manual"}
-        @{Name="RasMan";StartupType="Manual"}
-        @{Name="RemoteAccess";StartupType="Disabled"}
-        @{Name="RemoteRegistry";StartupType="Disabled"}
-        @{Name="RetailDemo";StartupType="Manual"}
-        @{Name="RmSvc";StartupType="Manual"}
-        @{Name="RpcEptMapper";StartupType="Automatic"}
-        @{Name="RpcLocator";StartupType="Manual"}
-        @{Name="RpcSs";StartupType="Automatic"}
-        @{Name="SCPolicySvc";StartupType="Manual"}
-        @{Name="SCardSvr";StartupType="Manual"}
-        @{Name="SDRSVC";StartupType="Manual"}
-        @{Name="SEMgrSvc";StartupType="Manual"}
-        @{Name="SENS";StartupType="Automatic"}
-        @{Name="SNMPTRAP";StartupType="Manual"}
-        @{Name="SNMPTrap";StartupType="Manual"}
-        @{Name="SSDPSRV";StartupType="Manual"}
-        @{Name="SamSs";StartupType="Automatic"}
-        @{Name="ScDeviceEnum";StartupType="Manual"}
-        @{Name="Schedule";StartupType="Automatic"}
-        @{Name="SecurityHealthService";StartupType="Manual"}
-        @{Name="Sense";StartupType="Manual"}
-        @{Name="SensorDataService";StartupType="Manual"}
-        @{Name="SensorService";StartupType="Manual"}
-        @{Name="SensrSvc";StartupType="Manual"}
-        @{Name="SessionEnv";StartupType="Manual"}
-        @{Name="SgrmBroker";StartupType="Automatic"}
-        @{Name="SharedAccess";StartupType="Manual"}
-        @{Name="SharedRealitySvc";StartupType="Manual"}
-        @{Name="ShellHWDetection";StartupType="Automatic"}
-        @{Name="SmsRouter";StartupType="Manual"}
-        @{Name="Spooler";StartupType="Automatic"}
-        @{Name="SstpSvc";StartupType="Manual"}
-        @{Name="StateRepository";StartupType="Manual"}
-        @{Name="StiSvc";StartupType="Manual"}
-        @{Name="StorSvc";StartupType="Manual"}
-        @{Name="SysMain";StartupType="Automatic"}
-        @{Name="SystemEventsBroker";StartupType="Automatic"}
-        @{Name="TabletInputService";StartupType="Manual"}
-        @{Name="TapiSrv";StartupType="Manual"}
-        @{Name="TermService";StartupType="Automatic"}
-        @{Name="TextInputManagementService";StartupType="Manual"}
-        @{Name="Themes";StartupType="Automatic"}
-        @{Name="TieringEngineService";StartupType="Manual"}
-        @{Name="TimeBroker";StartupType="Manual"}
-        @{Name="TimeBrokerSvc";StartupType="Manual"}
-        @{Name="TokenBroker";StartupType="Manual"}
-        @{Name="TrkWks";StartupType="Automatic"}
-        @{Name="TroubleshootingSvc";StartupType="Manual"}
-        @{Name="TrustedInstaller";StartupType="Manual"}
-        @{Name="UI0Detect";StartupType="Manual"}
-        @{Name="UdkUserSvc_*";StartupType="Manual"}
-        @{Name="UevAgentService";StartupType="Disabled"}
-        @{Name="UmRdpService";StartupType="Manual"}
-        @{Name="UnistoreSvc_*";StartupType="Manual"}
-        @{Name="UserDataSvc_*";StartupType="Manual"}
-        @{Name="UserManager";StartupType="Automatic"}
-        @{Name="UsoSvc";StartupType="Manual"}
-        @{Name="VGAuthService";StartupType="Automatic"}
-        @{Name="VMTools";StartupType="Automatic"}
-        @{Name="VSS";StartupType="Manual"}
-        @{Name="VacSvc";StartupType="Manual"}
-        @{Name="VaultSvc";StartupType="Automatic"}
-        @{Name="W32Time";StartupType="Manual"}
-        @{Name="WEPHOSTSVC";StartupType="Manual"}
-        @{Name="WFDSConMgrSvc";StartupType="Manual"}
-        @{Name="WMPNetworkSvc";StartupType="Manual"}
-        @{Name="WManSvc";StartupType="Manual"}
-        @{Name="WPDBusEnum";StartupType="Manual"}
-        @{Name="WSService";StartupType="Manual"}
-        @{Name="WSearch";StartupType="AutomaticDelayedStart"}
-        @{Name="WaaSMedicSvc";StartupType="Manual"}
-        @{Name="WalletService";StartupType="Manual"}
-        @{Name="WarpJITSvc";StartupType="Manual"}
-        @{Name="WbioSrvc";StartupType="Manual"}
-        @{Name="Wcmsvc";StartupType="Automatic"}
-        @{Name="WcsPlugInService";StartupType="Manual"}
-        @{Name="WdNisSvc";StartupType="Manual"}
-        @{Name="WdiServiceHost";StartupType="Manual"}
-        @{Name="WdiSystemHost";StartupType="Manual"}
-        @{Name="WebClient";StartupType="Manual"}
-        @{Name="Wecsvc";StartupType="Manual"}
-        @{Name="WerSvc";StartupType="Manual"}
-        @{Name="WiaRpc";StartupType="Manual"}
-        @{Name="WinDefend";StartupType="Automatic"}
-        @{Name="WinHttpAutoProxySvc";StartupType="Manual"}
-        @{Name="WinRM";StartupType="Manual"}
-        @{Name="Winmgmt";StartupType="Automatic"}
-        @{Name="WlanSvc";StartupType="Automatic"}
-        @{Name="WpcMonSvc";StartupType="Manual"}
-        @{Name="WpnService";StartupType="Manual"}
-        @{Name="WpnUserService_*";StartupType="Automatic"}
-        @{Name="XblAuthManager";StartupType="Manual"}
-        @{Name="XblGameSave";StartupType="Manual"}
-        @{Name="XboxGipSvc";StartupType="Manual"}
-        @{Name="XboxNetApiSvc";StartupType="Manual"}
-        @{Name="autotimesvc";StartupType="Manual"}
-        @{Name="bthserv";StartupType="Manual"}
-        @{Name="camsvc";StartupType="Manual"}
-        @{Name="cbdhsvc_*";StartupType="Manual"}
-        @{Name="cloudidsvc";StartupType="Manual"}
-        @{Name="dcsvc";StartupType="Manual"}
-        @{Name="defragsvc";StartupType="Manual"}
-        @{Name="diagnosticshub.standardcollector.service";StartupType="Manual"}
-        @{Name="diagsvc";StartupType="Manual"}
-        @{Name="dmwappushservice";StartupType="Manual"}
-        @{Name="dot3svc";StartupType="Manual"}
-        @{Name="edgeupdate";StartupType="Manual"}
-        @{Name="edgeupdatem";StartupType="Manual"}
-        @{Name="embeddedmode";StartupType="Manual"}
-        @{Name="fdPHost";StartupType="Manual"}
-        @{Name="fhsvc";StartupType="Manual"}
-        @{Name="gpsvc";StartupType="Automatic"}
-        @{Name="hidserv";StartupType="Manual"}
-        @{Name="icssvc";StartupType="Manual"}
-        @{Name="iphlpsvc";StartupType="Automatic"}
-        @{Name="lfsvc";StartupType="Manual"}
-        @{Name="lltdsvc";StartupType="Manual"}
-        @{Name="lmhosts";StartupType="Manual"}
-        @{Name="mpssvc";StartupType="Automatic"}
-        @{Name="msiserver";StartupType="Manual"}
-        @{Name="netprofm";StartupType="Manual"}
-        @{Name="nsi";StartupType="Automatic"}
-        @{Name="p2pimsvc";StartupType="Manual"}
-        @{Name="p2psvc";StartupType="Manual"}
-        @{Name="perceptionsimulation";StartupType="Manual"}
-        @{Name="pla";StartupType="Manual"}
-        @{Name="seclogon";StartupType="Manual"}
-        @{Name="shpamsvc";StartupType="Disabled"}
-        @{Name="smphost";StartupType="Manual"}
-        @{Name="spectrum";StartupType="Manual"}
-        @{Name="sppsvc";StartupType="AutomaticDelayedStart"}
-        @{Name="ssh-agent";StartupType="Disabled"}
-        @{Name="svsvc";StartupType="Manual"}
-        @{Name="swprv";StartupType="Manual"}
-        @{Name="tiledatamodelsvc";StartupType="Automatic"}
-        @{Name="tzautoupdate";StartupType="Disabled"}
-        @{Name="uhssvc";StartupType="Disabled"}
-        @{Name="upnphost";StartupType="Manual"}
-        @{Name="vds";StartupType="Manual"}
-        @{Name="vm3dservice";StartupType="Manual"}
-        @{Name="vmicguestinterface";StartupType="Manual"}
-        @{Name="vmicheartbeat";StartupType="Manual"}
-        @{Name="vmickvpexchange";StartupType="Manual"}
-        @{Name="vmicrdv";StartupType="Manual"}
-        @{Name="vmicshutdown";StartupType="Manual"}
-        @{Name="vmictimesync";StartupType="Manual"}
-        @{Name="vmicvmsession";StartupType="Manual"}
-        @{Name="vmicvss";StartupType="Manual"}
-        @{Name="vmvss";StartupType="Manual"}
-        @{Name="wbengine";StartupType="Manual"}
-        @{Name="wcncsvc";StartupType="Manual"}
-        @{Name="webthreatdefsvc";StartupType="Manual"}
-        @{Name="webthreatdefusersvc_*";StartupType="Automatic"}
-        @{Name="wercplsupport";StartupType="Manual"}
-        @{Name="wisvc";StartupType="Manual"}
-        @{Name="wlidsvc";StartupType="Manual"}
-        @{Name="wlpasvc";StartupType="Manual"}
-        @{Name="wmiApSrv";StartupType="Manual"}
-        @{Name="workfolderssvc";StartupType="Manual"}
-        @{Name="wscsvc";StartupType="AutomaticDelayedStart"}
-        @{Name="wuauserv";StartupType="Manual"}
-        @{Name="wudfsvc";StartupType="Manual"}
-    )
-
-    foreach ($svc in $services) {
-        $name = $svc.Name
-        $type = $svc.StartupType
-    
-        # Handle wildcard services (like Service_*)
-        if ($name -like "*_*") {
-            $base = $name.Substring(0, $name.IndexOf("_*"))
-            $matching = Get-Service | Where-Object { $_.Name -like "$base*" }
-            foreach ($msvc in $matching) {
-                try {
-                    Set-Service -Name $msvc.Name -StartupType $type -ErrorAction Stop
-                    Write-Host "$($msvc.Name): $type" -ForegroundColor Green
-                } catch {
-                    Write-Host "Could not set $($msvc.Name): $_" -ForegroundColor Yellow
+    # Use existing Confirm-YesNo if available; otherwise define a local fallback
+    if (-not (Get-Command Confirm-YesNo -ErrorAction SilentlyContinue)) {
+        function Confirm-YesNo([string]$Prompt, [bool]$DefaultYes=$true) {
+            $suffix = if ($DefaultYes) { " [Y/n]" } else { " [y/N]" }
+            while ($true) {
+                Write-Host "$Prompt$suffix " -NoNewline -ForegroundColor Yellow
+                $resp = Read-Host
+                if ([string]::IsNullOrWhiteSpace($resp)) { return $DefaultYes }
+                switch ($resp.Trim().ToLowerInvariant()) {
+                    "y" { return $true }
+                    "yes" { return $true }
+                    "n" { return $false }
+                    "no" { return $false }
+                    default { Write-Host "Please answer 'y' or 'n'." -ForegroundColor DarkYellow }
                 }
-            }
-        } else {
-            try {
-                Set-Service -Name $name -StartupType $type -ErrorAction Stop
-                Write-Host "$($name): $type" -ForegroundColor Green
-            } catch {
-                Write-Host "Could not set $($name): $_" -ForegroundColor Yellow
             }
         }
     }
 
-    Write-Host "All applicable services set to recommended startup types." -ForegroundColor Cyan
-    Pause
-}
+    $doRevert = Confirm-YesNo -Prompt "Revert service startup types to their OriginalType values?" -DefaultYes:$false
 
+    if ($doRevert) {
+        Write-Host "Reverting Windows service startup types to OriginalType where provided..." -ForegroundColor Cyan
+    } else {
+        Write-Host "Applying Windows service startup types..." -ForegroundColor Cyan
+    }
+
+    # Helper: set startup type including support for AutomaticDelayedStart
+    function Set-StartupType {
+        param(
+            [Parameter(Mandatory)] [string]$ServiceName,
+            [Parameter(Mandatory)] [ValidateSet('Automatic','Manual','Disabled','AutomaticDelayedStart')] [string]$StartupType
+        )
+
+        try {
+            $svc = Get-Service -Name $ServiceName -ErrorAction Stop
+
+            switch ($StartupType) {
+                'Automatic' {
+                    Set-Service -Name $ServiceName -StartupType Automatic -ErrorAction Stop
+                    $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName"
+                    if (Test-Path $regPath) {
+                        try { Set-ItemProperty -Path $regPath -Name DelayedAutoStart -Type DWord -Value 0 -Force -ErrorAction SilentlyContinue | Out-Null } catch {}
+                    }
+                }
+                'Manual' {
+                    Set-Service -Name $ServiceName -StartupType Manual -ErrorAction Stop
+                }
+                'Disabled' {
+                    Set-Service -Name $ServiceName -StartupType Disabled -ErrorAction Stop
+                }
+                'AutomaticDelayedStart' {
+                    Set-Service -Name $ServiceName -StartupType Automatic -ErrorAction Stop
+                    $sc = cmd /c "sc.exe config `"$ServiceName`" start= delayed-auto" 2>&1
+                    if ($LASTEXITCODE -ne 0) {
+                        $regPath = "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName"
+                        if (Test-Path $regPath) {
+                            Set-ItemProperty -Path $regPath -Name DelayedAutoStart -Type DWord -Value 1 -Force -ErrorAction Stop | Out-Null
+                        } else {
+                            throw "Could not set DelayedAutoStart registry. sc.exe output: $sc"
+                        }
+                    }
+                }
+            }
+            return $true
+        } catch {
+            Write-Host "Failed to set $ServiceName -> $StartupType :: $_" -ForegroundColor Yellow
+            return $false
+        }
+    }
+
+    # Data: services with desired StartupType and OriginalType for revert
+    # Supports wildcards like ServiceName_* by expanding to all matching services
+    $services = @(
+        @{Name="AJRouter";StartupType="Disabled";OriginalType="Manual"}
+        @{Name="ALG";StartupType="Manual";OriginalType="Manual"}
+        @{Name="AppIDSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="AppMgmt";StartupType="Manual";OriginalType="Manual"}
+        @{Name="AppReadiness";StartupType="Manual";OriginalType="Manual"}
+        @{Name="AppVClient";StartupType="Disabled";OriginalType="Disabled"}
+        @{Name="AppXSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="Appinfo";StartupType="Manual";OriginalType="Manual"}
+        @{Name="AssignedAccessManagerSvc";StartupType="Disabled";OriginalType="Manual"}
+        @{Name="AudioEndpointBuilder";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="AudioSrv";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="Audiosrv";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="AxInstSV";StartupType="Manual";OriginalType="Manual"}
+        @{Name="BDESVC";StartupType="Manual";OriginalType="Manual"}
+        @{Name="BFE";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="BITS";StartupType="AutomaticDelayedStart";OriginalType="Automatic"}
+        @{Name="BTAGService";StartupType="Manual";OriginalType="Manual"}
+        @{Name="BcastDVRUserService_*";StartupType="Manual";OriginalType="Manual"}
+        @{Name="BluetoothUserService_*";StartupType="Manual";OriginalType="Manual"}
+        @{Name="BrokerInfrastructure";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="Browser";StartupType="Manual";OriginalType="Manual"}
+        @{Name="BthAvctpSvc";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="BthHFSrv";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="CDPSvc";StartupType="Manual";OriginalType="Automatic"}
+        @{Name="CDPUserSvc_*";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="COMSysApp";StartupType="Manual";OriginalType="Manual"}
+        @{Name="CaptureService_*";StartupType="Manual";OriginalType="Manual"}
+        @{Name="CertPropSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="ClipSVC";StartupType="Manual";OriginalType="Manual"}
+        @{Name="ConsentUxUserSvc_*";StartupType="Manual";OriginalType="Manual"}
+        @{Name="CoreMessagingRegistrar";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="CredentialEnrollmentManagerUserSvc_*";StartupType="Manual";OriginalType="Manual"}
+        @{Name="CryptSvc";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="CscService";StartupType="Manual";OriginalType="Manual"}
+        @{Name="DPS";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="DcomLaunch";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="DcpSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="DevQueryBroker";StartupType="Manual";OriginalType="Manual"}
+        @{Name="DeviceAssociationBrokerSvc_*";StartupType="Manual";OriginalType="Manual"}
+        @{Name="DeviceAssociationService";StartupType="Manual";OriginalType="Manual"}
+        @{Name="DeviceInstall";StartupType="Manual";OriginalType="Manual"}
+        @{Name="DevicePickerUserSvc_*";StartupType="Manual";OriginalType="Manual"}
+        @{Name="DevicesFlowUserSvc_*";StartupType="Manual";OriginalType="Manual"}
+        @{Name="Dhcp";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="DiagTrack";StartupType="Disabled";OriginalType="Automatic"}
+        @{Name="DialogBlockingService";StartupType="Disabled";OriginalType="Disabled"}
+        @{Name="DispBrokerDesktopSvc";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="DisplayEnhancementService";StartupType="Manual";OriginalType="Manual"}
+        @{Name="DmEnrollmentSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="Dnscache";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="DoSvc";StartupType="AutomaticDelayedStart";OriginalType="Automatic"}
+        @{Name="DsSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="DsmSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="DusmSvc";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="EFS";StartupType="Manual";OriginalType="Manual"}
+        @{Name="EapHost";StartupType="Manual";OriginalType="Manual"}
+        @{Name="EntAppSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="EventLog";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="EventSystem";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="FDResPub";StartupType="Manual";OriginalType="Manual"}
+        @{Name="Fax";StartupType="Manual";OriginalType="Manual"}
+        @{Name="FontCache";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="FrameServer";StartupType="Manual";OriginalType="Manual"}
+        @{Name="FrameServerMonitor";StartupType="Manual";OriginalType="Manual"}
+        @{Name="GraphicsPerfSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="HomeGroupListener";StartupType="Manual";OriginalType="Manual"}
+        @{Name="HomeGroupProvider";StartupType="Manual";OriginalType="Manual"}
+        @{Name="HvHost";StartupType="Manual";OriginalType="Manual"}
+        @{Name="IEEtwCollectorService";StartupType="Manual";OriginalType="Manual"}
+        @{Name="IKEEXT";StartupType="Manual";OriginalType="Manual"}
+        @{Name="InstallService";StartupType="Manual";OriginalType="Manual"}
+        @{Name="InventorySvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="IpxlatCfgSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="KeyIso";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="KtmRm";StartupType="Manual";OriginalType="Manual"}
+        @{Name="LSM";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="LanmanServer";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="LanmanWorkstation";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="LicenseManager";StartupType="Manual";OriginalType="Manual"}
+        @{Name="LxpSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="MSDTC";StartupType="Manual";OriginalType="Manual"}
+        @{Name="MSiSCSI";StartupType="Manual";OriginalType="Manual"}
+        @{Name="MapsBroker";StartupType="AutomaticDelayedStart";OriginalType="Automatic"}
+        @{Name="McpManagementService";StartupType="Manual";OriginalType="Manual"}
+        @{Name="MessagingService_*";StartupType="Manual";OriginalType="Manual"}
+        @{Name="MicrosoftEdgeElevationService";StartupType="Manual";OriginalType="Manual"}
+        @{Name="MixedRealityOpenXRSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="MpsSvc";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="MsKeyboardFilter";StartupType="Manual";OriginalType="Disabled"}
+        @{Name="NPSMSvc_*";StartupType="Manual";OriginalType="Manual"}
+        @{Name="NaturalAuthentication";StartupType="Manual";OriginalType="Manual"}
+        @{Name="NcaSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="NcbService";StartupType="Manual";OriginalType="Manual"}
+        @{Name="NcdAutoSetup";StartupType="Manual";OriginalType="Manual"}
+        @{Name="NetSetupSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="NetTcpPortSharing";StartupType="Disabled";OriginalType="Disabled"}
+        @{Name="Netlogon";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="Netman";StartupType="Manual";OriginalType="Manual"}
+        @{Name="NgcCtnrSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="NgcSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="NlaSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="OneSyncSvc_*";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="P9RdrService_*";StartupType="Manual";OriginalType="Manual"}
+        @{Name="PNRPAutoReg";StartupType="Manual";OriginalType="Manual"}
+        @{Name="PNRPsvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="PcaSvc";StartupType="Manual";OriginalType="Automatic"}
+        @{Name="PeerDistSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="PenService_*";StartupType="Manual";OriginalType="Manual"}
+        @{Name="PerfHost";StartupType="Manual";OriginalType="Manual"}
+        @{Name="PhoneSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="PimIndexMaintenanceSvc_*";StartupType="Manual";OriginalType="Manual"}
+        @{Name="PlugPlay";StartupType="Manual";OriginalType="Manual"}
+        @{Name="PolicyAgent";StartupType="Manual";OriginalType="Manual"}
+        @{Name="Power";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="PrintNotify";StartupType="Manual";OriginalType="Manual"}
+        @{Name="PrintWorkflowUserSvc_*";StartupType="Manual";OriginalType="Manual"}
+        @{Name="ProfSvc";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="PushToInstall";StartupType="Manual";OriginalType="Manual"}
+        @{Name="QWAVE";StartupType="Manual";OriginalType="Manual"}
+        @{Name="RasAuto";StartupType="Manual";OriginalType="Manual"}
+        @{Name="RasMan";StartupType="Manual";OriginalType="Manual"}
+        @{Name="RemoteAccess";StartupType="Disabled";OriginalType="Disabled"}
+        @{Name="RemoteRegistry";StartupType="Disabled";OriginalType="Disabled"}
+        @{Name="RetailDemo";StartupType="Manual";OriginalType="Manual"}
+        @{Name="RmSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="RpcEptMapper";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="RpcLocator";StartupType="Manual";OriginalType="Manual"}
+        @{Name="RpcSs";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="SCPolicySvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="SCardSvr";StartupType="Manual";OriginalType="Manual"}
+        @{Name="SDRSVC";StartupType="Manual";OriginalType="Manual"}
+        @{Name="SEMgrSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="SENS";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="SNMPTRAP";StartupType="Manual";OriginalType="Manual"}
+        @{Name="SNMPTrap";StartupType="Manual";OriginalType="Manual"}
+        @{Name="SSDPSRV";StartupType="Manual";OriginalType="Manual"}
+        @{Name="SamSs";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="ScDeviceEnum";StartupType="Manual";OriginalType="Manual"}
+        @{Name="Schedule";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="SecurityHealthService";StartupType="Manual";OriginalType="Manual"}
+        @{Name="Sense";StartupType="Manual";OriginalType="Manual"}
+        @{Name="SensorDataService";StartupType="Manual";OriginalType="Manual"}
+        @{Name="SensorService";StartupType="Manual";OriginalType="Manual"}
+        @{Name="SensrSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="SessionEnv";StartupType="Manual";OriginalType="Manual"}
+        @{Name="SgrmBroker";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="SharedAccess";StartupType="Manual";OriginalType="Manual"}
+        @{Name="SharedRealitySvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="ShellHWDetection";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="SmsRouter";StartupType="Manual";OriginalType="Manual"}
+        @{Name="Spooler";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="SstpSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="StateRepository";StartupType="Manual";OriginalType="Automatic"}
+        @{Name="StiSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="StorSvc";StartupType="Manual";OriginalType="Automatic"}
+        @{Name="SysMain";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="SystemEventsBroker";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="TabletInputService";StartupType="Manual";OriginalType="Manual"}
+        @{Name="TapiSrv";StartupType="Manual";OriginalType="Manual"}
+        @{Name="TermService";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="TextInputManagementService";StartupType="Manual";OriginalType="Automatic"}
+        @{Name="Themes";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="TieringEngineService";StartupType="Manual";OriginalType="Manual"}
+        @{Name="TimeBroker";StartupType="Manual";OriginalType="Manual"}
+        @{Name="TimeBrokerSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="TokenBroker";StartupType="Manual";OriginalType="Manual"}
+        @{Name="TrkWks";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="TroubleshootingSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="TrustedInstaller";StartupType="Manual";OriginalType="Manual"}
+        @{Name="UI0Detect";StartupType="Manual";OriginalType="Manual"}
+        @{Name="UdkUserSvc_*";StartupType="Manual";OriginalType="Manual"}
+        @{Name="UevAgentService";StartupType="Disabled";OriginalType="Disabled"}
+        @{Name="UmRdpService";StartupType="Manual";OriginalType="Manual"}
+        @{Name="UnistoreSvc_*";StartupType="Manual";OriginalType="Manual"}
+        @{Name="UserDataSvc_*";StartupType="Manual";OriginalType="Manual"}
+        @{Name="UserManager";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="UsoSvc";StartupType="Manual";OriginalType="Automatic"}
+        @{Name="VGAuthService";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="VMTools";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="VSS";StartupType="Manual";OriginalType="Manual"}
+        @{Name="VacSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="VaultSvc";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="W32Time";StartupType="Manual";OriginalType="Manual"}
+        @{Name="WEPHOSTSVC";StartupType="Manual";OriginalType="Manual"}
+        @{Name="WFDSConMgrSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="WMPNetworkSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="WManSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="WPDBusEnum";StartupType="Manual";OriginalType="Manual"}
+        @{Name="WSService";StartupType="Manual";OriginalType="Manual"}
+        @{Name="WSearch";StartupType="AutomaticDelayedStart";OriginalType="Automatic"}
+        @{Name="WaaSMedicSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="WalletService";StartupType="Manual";OriginalType="Manual"}
+        @{Name="WarpJITSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="WbioSrvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="Wcmsvc";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="WcsPlugInService";StartupType="Manual";OriginalType="Manual"}
+        @{Name="WdNisSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="WdiServiceHost";StartupType="Manual";OriginalType="Manual"}
+        @{Name="WdiSystemHost";StartupType="Manual";OriginalType="Manual"}
+        @{Name="WebClient";StartupType="Manual";OriginalType="Manual"}
+        @{Name="Wecsvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="WerSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="WiaRpc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="WinDefend";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="WinHttpAutoProxySvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="WinRM";StartupType="Manual";OriginalType="Manual"}
+        @{Name="Winmgmt";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="WlanSvc";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="WpcMonSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="WpnService";StartupType="Manual";OriginalType="Automatic"}
+        @{Name="WpnUserService_*";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="XblAuthManager";StartupType="Manual";OriginalType="Manual"}
+        @{Name="XblGameSave";StartupType="Manual";OriginalType="Manual"}
+        @{Name="XboxGipSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="XboxNetApiSvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="autotimesvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="bthserv";StartupType="Manual";OriginalType="Manual"}
+        @{Name="camsvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="cbdhsvc_*";StartupType="Manual";OriginalType="Automatic"}
+        @{Name="cloudidsvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="dcsvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="defragsvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="diagnosticshub.standardcollector.service";StartupType="Manual";OriginalType="Manual"}
+        @{Name="diagsvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="dmwappushservice";StartupType="Manual";OriginalType="Manual"}
+        @{Name="dot3svc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="edgeupdate";StartupType="Manual";OriginalType="Automatic"}
+        @{Name="edgeupdatem";StartupType="Manual";OriginalType="Manual"}
+        @{Name="embeddedmode";StartupType="Manual";OriginalType="Manual"}
+        @{Name="fdPHost";StartupType="Manual";OriginalType="Manual"}
+        @{Name="fhsvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="gpsvc";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="hidserv";StartupType="Manual";OriginalType="Manual"}
+        @{Name="icssvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="iphlpsvc";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="lfsvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="lltdsvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="lmhosts";StartupType="Manual";OriginalType="Manual"}
+        @{Name="mpssvc";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="msiserver";StartupType="Manual";OriginalType="Manual"}
+        @{Name="netprofm";StartupType="Manual";OriginalType="Manual"}
+        @{Name="nsi";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="p2pimsvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="p2psvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="perceptionsimulation";StartupType="Manual";OriginalType="Manual"}
+        @{Name="pla";StartupType="Manual";OriginalType="Manual"}
+        @{Name="seclogon";StartupType="Manual";OriginalType="Manual"}
+        @{Name="shpamsvc";StartupType="Disabled";OriginalType="Disabled"}
+        @{Name="smphost";StartupType="Manual";OriginalType="Manual"}
+        @{Name="spectrum";StartupType="Manual";OriginalType="Manual"}
+        @{Name="sppsvc";StartupType="AutomaticDelayedStart";OriginalType="Automatic"}
+        @{Name="ssh-agent";StartupType="Disabled";OriginalType="Disabled"}
+        @{Name="svsvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="swprv";StartupType="Manual";OriginalType="Manual"}
+        @{Name="tiledatamodelsvc";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="tzautoupdate";StartupType="Disabled";OriginalType="Disabled"}
+        @{Name="uhssvc";StartupType="Disabled";OriginalType="Disabled"}
+        @{Name="upnphost";StartupType="Manual";OriginalType="Manual"}
+        @{Name="vds";StartupType="Manual";OriginalType="Manual"}
+        @{Name="vm3dservice";StartupType="Manual";OriginalType="Automatic"}
+        @{Name="vmicguestinterface";StartupType="Manual";OriginalType="Manual"}
+        @{Name="vmicheartbeat";StartupType="Manual";OriginalType="Manual"}
+        @{Name="vmickvpexchange";StartupType="Manual";OriginalType="Manual"}
+        @{Name="vmicrdv";StartupType="Manual";OriginalType="Manual"}
+        @{Name="vmicshutdown";StartupType="Manual";OriginalType="Manual"}
+        @{Name="vmictimesync";StartupType="Manual";OriginalType="Manual"}
+        @{Name="vmicvmsession";StartupType="Manual";OriginalType="Manual"}
+        @{Name="vmicvss";StartupType="Manual";OriginalType="Manual"}
+        @{Name="vmvss";StartupType="Manual";OriginalType="Manual"}
+        @{Name="wbengine";StartupType="Manual";OriginalType="Manual"}
+        @{Name="wcncsvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="webthreatdefsvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="webthreatdefusersvc_*";StartupType="Automatic";OriginalType="Automatic"}
+        @{Name="wercplsupport";StartupType="Manual";OriginalType="Manual"}
+        @{Name="wisvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="wlidsvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="wlpasvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="wmiApSrv";StartupType="Manual";OriginalType="Manual"}
+        @{Name="workfolderssvc";StartupType="Manual";OriginalType="Manual"}
+        @{Name="wscsvc";StartupType="AutomaticDelayedStart";OriginalType="Automatic"}
+        @{Name="wuauserv";StartupType="Manual";OriginalType="Manual"}
+        @{Name="wudfsvc";StartupType="Manual";OriginalType="Manual"}
+    )
+
+    $updated = 0
+    $skipped = 0
+    $failed = 0
+
+    foreach ($svcDef in $services) {
+        $name = [string]$svcDef.Name
+        $target = if ($doRevert) { [string]$svcDef.OriginalType } else { [string]$svcDef.StartupType }
+
+        # Expand wildcards (e.g., Service_*), otherwise handle directly
+        $matchedServices = @()
+        if ($name -match '[\*\?]') {
+            try {
+                $matchedServices = Get-Service -ErrorAction SilentlyContinue | Where-Object { $_.Name -like $name }
+            } catch { $matchedServices = @() }
+            if (-not $matchedServices -or $matchedServices.Count -eq 0) {
+                Write-Host "Wildcard pattern matched no services: $name" -ForegroundColor DarkYellow
+                $skipped++
+                continue
+            }
+        } else {
+            $svcObj = Get-Service -Name $name -ErrorAction SilentlyContinue
+            if ($null -ne $svcObj) { $matchedServices = @($svcObj) } else {
+                Write-Host "Service not found (skipped): $name" -ForegroundColor DarkYellow
+                $skipped++
+                continue
+            }
+        }
+
+        foreach ($ms in $matchedServices) {
+            if (Set-StartupType -ServiceName $ms.Name -StartupType $target) {
+                Write-Host "$($ms.Name): $target" -ForegroundColor Green
+                $updated++
+            } else {
+                $failed++
+            }
+        }
+    }
+
+    Write-Host ""
+    Write-Host "Service startup update complete. Updated: $updated, Skipped: $skipped, Failed: $failed" -ForegroundColor Cyan
+
+    if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
+}
 
 function Get-DefaultExportFolder {
     <#
@@ -1260,6 +1348,72 @@ function Disable-Telemetry {
     Pause
 }
 
+function Set-EdgePolicies {
+    [CmdletBinding()]
+    param(
+        [switch]$Revert
+    )
+
+    Write-Host ""
+    if ($Revert) {
+        Write-Host "Reverting Microsoft Edge policy values to OriginalValue where provided..." -ForegroundColor Cyan
+    } else {
+        Write-Host "Applying Microsoft Edge policy values..." -ForegroundColor Cyan
+    }
+
+    # Define policy entries (deduplicated)
+    $entries = @(
+        @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\EdgeUpdate"; Name="CreateDesktopShortcutDefault"; Type="DWord"; Value=0; OriginalValue=1 }
+
+        @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Edge"; Name="EdgeEnhanceImagesEnabled"; Type="DWord"; Value=0; OriginalValue=1 }
+        @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Edge"; Name="PersonalizationReportingEnabled"; Type="DWord"; Value=0; OriginalValue=1 }
+        @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Edge"; Name="ShowRecommendationsEnabled"; Type="DWord"; Value=0; OriginalValue=1 }
+        @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Edge"; Name="HideFirstRunExperience"; Type="DWord"; Value=1; OriginalValue=0 }
+        @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Edge"; Name="UserFeedbackAllowed"; Type="DWord"; Value=0; OriginalValue=1 }
+        @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Edge"; Name="ConfigureDoNotTrack"; Type="DWord"; Value=1; OriginalValue=0 }
+        @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Edge"; Name="AlternateErrorPagesEnabled"; Type="DWord"; Value=0; OriginalValue=1 }
+        @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Edge"; Name="EdgeCollectionsEnabled"; Type="DWord"; Value=0; OriginalValue=1 }
+        @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Edge"; Name="EdgeFollowEnabled"; Type="DWord"; Value=0; OriginalValue=1 }
+        @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Edge"; Name="EdgeShoppingAssistantEnabled"; Type="DWord"; Value=0; OriginalValue=1 }
+        @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Edge"; Name="MicrosoftEdgeInsiderPromotionEnabled"; Type="DWord"; Value=0; OriginalValue=1 }
+        @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Edge"; Name="ShowMicrosoftRewards"; Type="DWord"; Value=0; OriginalValue=1 }
+        @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Edge"; Name="WebWidgetAllowed"; Type="DWord"; Value=0; OriginalValue=1 }
+        @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Edge"; Name="DiagnosticData"; Type="DWord"; Value=0; OriginalValue=1 }
+        @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Edge"; Name="EdgeAssetDeliveryServiceEnabled"; Type="DWord"; Value=0; OriginalValue=1 }
+        @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Edge"; Name="CryptoWalletEnabled"; Type="DWord"; Value=0; OriginalValue=1 }
+        @{ Path="HKLM:\SOFTWARE\Policies\Microsoft\Edge"; Name="WalletDonationEnabled"; Type="DWord"; Value=0; OriginalValue=1 }
+    )
+
+    $setCount = 0
+    $failCount = 0
+    foreach ($e in $entries) {
+        $path = [string]$e.Path
+        $name = [string]$e.Name
+        $type = [string]$e.Type
+        $targetValue = if ($Revert -and $e.ContainsKey('OriginalValue')) { [int]$e.OriginalValue } else { [int]$e.Value }
+
+        try {
+            if (-not (Test-Path -Path $path)) {
+                New-Item -Path $path -Force | Out-Null
+            }
+            # New-ItemProperty -Force updates if exists, creates if missing
+            New-ItemProperty -Path $path -Name $name -PropertyType $type -Value $targetValue -Force | Out-Null
+            Write-Host ("{0} -> {1} = {2} ({3})" -f $path, $name, $targetValue, $type) -ForegroundColor Green
+            $setCount++
+        } catch {
+            Write-Host ("Failed: {0} -> {1} :: {2}" -f $path, $name, $_) -ForegroundColor Yellow
+            $failCount++
+        }
+    }
+
+    Write-Host ""
+    Write-Host "Edge policy update complete. Set: $setCount, Failed: $failCount" -ForegroundColor Cyan
+    Write-Host "Note: Restart Microsoft Edge for changes to take effect." -ForegroundColor DarkGray
+
+    if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
+}
+
+
 # --- Main Menu Loop ---
 
 do {
@@ -1361,13 +1515,14 @@ do {
                 $choice = $null
                 while ($null -eq $choice) {
                     $input = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").Character
-                    if ($input -match '^[0-2]$') {
+                    if ($input -match '^[0-3]$') {
                         $choice = $input
                     }
                 }
                 switch ($choice) {
                     "1" { Set-ServicesRecommended }
                     "2" { Disable-Telemetry }
+                    "3" { Set-EdgePolicies }
                     "0" { $exitMenu = $true }
                 }
             } while (-not $exitMenu)
