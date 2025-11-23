@@ -54,9 +54,10 @@ function Show-MainMenu {
     Write-Host "   [2] System"
     Write-Host "   [3] Printer"
     Write-Host "   [4] Disk"
+    Write-Host "   [5] Debloat"
     Write-Host "   [0] Exit"
     Write-Host ""
-    Write-Host "Choose a menu option using your keyboard [1-4,0] : " -NoNewline
+    Write-Host "Choose a menu option using your keyboard [1-5,0] : " -NoNewline
 }
 
 function Show-NetworkMenu {
@@ -79,10 +80,9 @@ function Show-SystemMenu {
     Write-Host "   [4] Reset Windows Update"
     Write-Host "   [5] Force Time Sync"
     Write-Host "   [6] Create and Open Battery Report"
-    Write-Host "   [7] Set Services to Recommended Startup"
     Write-Host "   [0] Back"
     Write-Host ""
-    Write-Host "Choose a menu option using your keyboard [1-8,0] : " -NoNewline
+    Write-Host "Choose a menu option using your keyboard [1-6,0] : " -NoNewline
 }
 
 function Show-PrinterMenu {
@@ -104,6 +104,13 @@ function Show-DiskMenu {
     Write-Host ""
     Write-Host "Choose a menu option using your keyboard [1-4,0] : " -NoNewline
 }
+
+function Show-DebloatMenu {
+    Show-Header "Debloat"
+    Write-Host "   [1] Set Services to Recommended Startup"
+    Write-Host "   [0] Back"
+    Write-Host ""
+    Write-Host "Choose a menu option using your keyboard [1,0] : " -NoNewline
 
 function Set-ServicesRecommended {
     Write-Host ""
@@ -1128,6 +1135,23 @@ do {
                     "2" { Show-DiskSpace }
                     "3" { Run-DiskCleanup }
                     "4" { Clean-TempFiles }
+                    "0" { $exitMenu = $true }
+                }
+            } while (-not $exitMenu)
+        }
+        "5" { # Debloat
+            $exitMenu = $false
+            do {
+                Show-DebloatMenu
+                $choice = $null
+                while ($null -eq $choice) {
+                    $input = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").Character
+                    if ($input -match '^[0-1]$') {
+                        $choice = $input
+                    }
+                }
+                switch ($choice) {
+                    "1" { Open-DiskManager }
                     "0" { $exitMenu = $true }
                 }
             } while (-not $exitMenu)
