@@ -111,6 +111,7 @@ function Show-DebloatMenu {
     Write-Host "   [0] Back"
     Write-Host ""
     Write-Host "Choose a menu option using your keyboard [1,0] : " -NoNewline
+}
 
 function Set-ServicesRecommended {
     Write-Host ""
