@@ -1053,7 +1053,7 @@ do {
     $mainChoice = $null
     while ($null -eq $mainChoice) {
         $input = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").Character
-        if ($input -match '^[0-4]$') {
+        if ($input -match '^[0-5]$') {
             $mainChoice = $input
         }
     }
