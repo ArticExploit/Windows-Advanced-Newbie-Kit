@@ -108,9 +108,10 @@ function Show-DiskMenu {
 function Show-DebloatMenu {
     Show-Header "Debloat"
     Write-Host "   [1] Set Services to Recommended Startup"
+    Write-Host "   [2] Disable Telemetry"
     Write-Host "   [0] Back"
     Write-Host ""
-    Write-Host "Choose a menu option using your keyboard [1,0] : " -NoNewline
+    Write-Host "Choose a menu option using your keyboard [1-2,0] : " -NoNewline
 }
 
 function Set-ServicesRecommended {
@@ -658,7 +659,6 @@ function Import-WiFiProfiles {
     Pause
 }
 
-# --- Commands for each category ---
 
 function Flush-DNS {
     Write-Host ""
@@ -1045,6 +1045,220 @@ function Setup-ScannerShare {
     Pause
 }
 
+function Disable-Telemetry {
+    Write-Host ""
+    Write-Host "Applying telemetry/privacy tweaks (conservative mode)..." -ForegroundColor Cyan
+    # Conservative: avoids aggressive actions (no ACL deny tricks, no wholesale policy deletions, no WER service disable, no svchost threshold tweaks)
+
+    # Helpers (self-contained)
+    function Set-RegValue([string]$Path, [string]$Name, [string]$Type, [object]$Value) {
+        try {
+            if (-not (Test-Path -Path $Path)) {
+                New-Item -Path $Path -Force | Out-Null
+            }
+            New-ItemProperty -Path $Path -Name $Name -PropertyType $Type -Value $Value -Force | Out-Null
+            return $true
+        } catch {
+            Write-Host "Registry set failed: $Path [$Name] => $Value :: $_" -ForegroundColor Yellow
+            return $false
+        }
+    }
+
+    function Disable-TaskPath([string]$FullTaskName) {
+        try {
+            $matches = [regex]::Match($FullTaskName, '^(\\.+\\)([^\\]+)$')
+            if ($matches.Success) {
+                $taskPath = $matches.Groups[1].Value
+                $taskName = $matches.Groups[2].Value
+                try {
+                    $t = Get-ScheduledTask -TaskPath $taskPath -TaskName $taskName -ErrorAction Stop
+                    Disable-ScheduledTask -TaskPath $taskPath -TaskName $taskName -ErrorAction SilentlyContinue | Out-Null
+                    Write-Host "Disabled task: $FullTaskName" -ForegroundColor Green
+                    return
+                } catch {
+                    $null = cmd /c "schtasks /Change /TN `"$FullTaskName`" /Disable" 2>&1
+                    if ($LASTEXITCODE -eq 0) {
+                        Write-Host "Disabled task (schtasks): $FullTaskName" -ForegroundColor Green
+                    } else {
+                        Write-Host "Task not found or could not be disabled: $FullTaskName" -ForegroundColor DarkYellow
+                    }
+                }
+            } else {
+                $null = cmd /c "schtasks /Change /TN `"$FullTaskName`" /Disable" 2>&1
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "Disabled task (schtasks): $FullTaskName" -ForegroundColor Green
+                } else {
+                    Write-Host "Task not found or could not be disabled: $FullTaskName" -ForegroundColor DarkYellow
+                }
+            }
+        } catch {
+            Write-Host "Failed to disable task: $FullTaskName :: $_" -ForegroundColor Yellow
+        }
+    }
+
+    # 1) Set legacy boot menu policy (helps show F8 menu). Harmless if unsupported.
+    try {
+        & bcdedit /set "{current}" bootmenupolicy Legacy | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "Boot menu policy set to Legacy." -ForegroundColor Green
+        } else {
+            Write-Host "bcdedit returned code $LASTEXITCODE (continuing)." -ForegroundColor DarkYellow
+        }
+    } catch {
+        Write-Host "Failed to set bootmenupolicy Legacy: $_" -ForegroundColor Yellow
+    }
+
+    # 2) On builds < 22557, touch Task Manager Preferences to apply tweak (index 28 byte -> 0)
+    try {
+        $build = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name CurrentBuild -ErrorAction Stop).CurrentBuild
+        if ([int]$build -lt 22557) {
+            Write-Host "Adjusting Task Manager preferences for legacy builds (<22557)..." -ForegroundColor Yellow
+            $taskmgr = Start-Process -WindowStyle Hidden -FilePath taskmgr.exe -PassThru
+            $preferences = $null
+
+            for ($i = 0; $i -lt 80 -and -not $preferences; $i++) {
+                Start-Sleep -Milliseconds 100
+                $preferences = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\TaskManager" -Name "Preferences" -ErrorAction SilentlyContinue
+            }
+
+            if ($preferences -and $preferences.Preferences -is [byte[]]) {
+                if ($preferences.Preferences.Length -ge 29) {
+                    $prefs = $preferences.Preferences
+                    $prefs[28] = 0
+                    Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\TaskManager" -Name "Preferences" -Type Binary -Value $prefs -Force
+                    Write-Host "Task Manager preference byte[28] set to 0." -ForegroundColor Green
+                } else {
+                    Write-Host "Task Manager Preferences length unexpected; skipped tweak." -ForegroundColor DarkYellow
+                }
+            } else {
+                Write-Host "Task Manager Preferences not found; skipped tweak." -ForegroundColor DarkYellow
+            }
+
+            try { if ($taskmgr -and -not $taskmgr.HasExited) { Stop-Process -Id $taskmgr.Id -Force -ErrorAction SilentlyContinue } } catch {}
+        }
+    } catch {
+        Write-Host "Failed adjusting Task Manager preferences: $_" -ForegroundColor Yellow
+    }
+
+    # 3) Remove Explorer namespace entry (cosmetic)
+    try {
+        $nsKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\MyComputer\NameSpace\{0DB7E03F-FC29-4DC6-9020-FF41B59E513A}"
+        if (Test-Path $nsKey) {
+            Remove-Item -Path $nsKey -Recurse -Force -ErrorAction Stop
+            Write-Host "Removed Explorer namespace entry {0DB7E03F-FC29-4DC6-9020-FF41B59E513A}." -ForegroundColor Green
+        } else {
+            Write-Host "Explorer namespace key not present; nothing to remove." -ForegroundColor DarkYellow
+        }
+    } catch {
+        Write-Host "Failed removing Explorer namespace entry: $_" -ForegroundColor Yellow
+    }
+
+    # 4) Disable Defender Auto Sample Submission (2 = never send)
+    try {
+        Set-MpPreference -SubmitSamplesConsent 2 -ErrorAction Stop | Out-Null
+        Write-Host "Disabled Defender automatic sample submission." -ForegroundColor Green
+    } catch {
+        Write-Host "Set-MpPreference not available or failed (Defender not present?): $_" -ForegroundColor DarkYellow
+    }
+
+    # --- Conservative telemetry reductions ---
+
+    # A) Stop and disable core telemetry services (keep WER service intact)
+    $telemetryServices = @(
+        'DiagTrack',                                         # Connected User Experiences and Telemetry
+        'dmwappushservice',                                  # WAP Push Message Routing
+        'diagnosticshub.standardcollector.service'           # Diagnostics Hub
+    )
+    foreach ($svc in $telemetryServices) {
+        try {
+            $s = Get-Service -Name $svc -ErrorAction SilentlyContinue
+            if ($null -ne $s) {
+                if ($s.Status -ne 'Stopped') { try { Stop-Service -Name $svc -Force -ErrorAction SilentlyContinue } catch {} }
+                try { Set-Service -Name $svc -StartupType Disabled -ErrorAction SilentlyContinue } catch {}
+                Write-Host "Service disabled: $svc" -ForegroundColor Green
+            } else {
+                Write-Host "Service not found (skipped): $svc" -ForegroundColor DarkYellow
+            }
+        } catch {
+            Write-Host "Error handling service $svc :: $_" -ForegroundColor Yellow
+        }
+    }
+
+    # B) Disable CEIP/telemetry/feedback tasks (WER queue task is safe to disable)
+    $telemetryTasks = @(
+        '\Microsoft\Windows\Application Experience\Microsoft Compatibility Appraiser',
+        '\Microsoft\Windows\Application Experience\ProgramDataUpdater',
+        '\Microsoft\Windows\Autochk\Proxy',
+        '\Microsoft\Windows\Customer Experience Improvement Program\Consolidator',
+        '\Microsoft\Windows\Customer Experience Improvement Program\UsbCeip',
+        '\Microsoft\Windows\Customer Experience Improvement Program\KernelCeipTask',
+        '\Microsoft\Windows\DiskDiagnostic\Microsoft-Windows-DiskDiagnosticDataCollector',
+        '\Microsoft\Windows\DiskFootprint\Diagnostics',
+        '\Microsoft\Windows\Feedback\Siuf\DmClient',
+        '\Microsoft\Windows\Feedback\Siuf\DmClientOnScenarioDownload',
+        '\Microsoft\Windows\Windows Error Reporting\QueueReporting'
+    )
+    foreach ($t in $telemetryTasks) { Disable-TaskPath -FullTaskName $t }
+
+    # C) Apply machine-wide policy/registry changes
+    $ok = $true
+    $ok = $ok -band (Set-RegValue -Path 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'AllowTelemetry' -Type DWord -Value 0)
+    $ok = $ok -band (Set-RegValue -Path 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'AllowDiagnosticData' -Type DWord -Value 0)
+    $ok = $ok -band (Set-RegValue -Path 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'AllowDeviceNameInTelemetry' -Type DWord -Value 0)
+    $ok = $ok -band (Set-RegValue -Path 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\DataCollection' -Name 'DoNotShowFeedbackNotifications' -Type DWord -Value 1)
+    $ok = $ok -band (Set-RegValue -Path 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\DataCollection' -Name 'AllowTelemetry' -Type DWord -Value 0)
+    $ok = $ok -band (Set-RegValue -Path 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\SQMClient\Windows' -Name 'CEIPEnable' -Type DWord -Value 0)
+    $ok = $ok -band (Set-RegValue -Path 'Registry::HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\Windows Search' -Name 'AllowCortana' -Type DWord -Value 0)
+
+    if ($ok) {
+        Write-Host "Applied machine-wide policies to minimize diagnostic data and feedback prompts." -ForegroundColor Green
+    } else {
+        Write-Host "One or more machine policy changes failed. See warnings above." -ForegroundColor Yellow
+    }
+
+    # D) Apply per-user privacy/telemetry reductions for all existing user profiles
+    try {
+        $userRoots = Get-ChildItem Registry::HKEY_USERS -ErrorAction Stop | Where-Object {
+            $_.Name -match 'HKEY_USERS\\S-1-5-21-\d+-\d+-\d+-\d+$'
+        }
+
+        foreach ($ur in $userRoots) {
+            $sid = ($ur.Name -split '\\')[-1]
+            $base = "Registry::HKEY_USERS\$sid"
+
+            Set-RegValue -Path "$base\Software\Microsoft\Windows\CurrentVersion\AdvertisingInfo" -Name 'Enabled' -Type DWord -Value 0 | Out-Null
+            Set-RegValue -Path "$base\Software\Microsoft\Windows\CurrentVersion\Privacy" -Name 'TailoredExperiencesWithDiagnosticDataEnabled' -Type DWord -Value 0 | Out-Null
+            Set-RegValue -Path "$base\Software\Microsoft\Siuf\Rules" -Name 'NumberOfSIUFInPeriod' -Type DWord -Value 0 | Out-Null
+            Set-RegValue -Path "$base\Software\Microsoft\Siuf\Rules" -Name 'PeriodInNanoSeconds' -Type DWord -Value 0 | Out-Null
+            Set-RegValue -Path "$base\Software\Policies\Microsoft\Windows\Explorer" -Name 'DisableSearchBoxSuggestions' -Type DWord -Value 1 | Out-Null
+            Set-RegValue -Path "$base\Software\Microsoft\Windows\CurrentVersion\Search" -Name 'BingSearchEnabled' -Type DWord -Value 0 | Out-Null
+            Set-RegValue -Path "$base\Software\Microsoft\Windows\CurrentVersion\Search" -Name 'CortanaConsent' -Type DWord -Value 0 | Out-Null
+
+            Write-Host "Applied per-user privacy settings for SID: $sid" -ForegroundColor DarkCyan
+        }
+    } catch {
+        Write-Host "Failed applying per-user settings: $_" -ForegroundColor Yellow
+    }
+
+    # E) Disable Windows Recall feature (if present)
+    try {
+        Write-Host "Disabling Windows Recall feature (if available)..." -ForegroundColor Yellow
+        $dism = Start-Process -FilePath dism.exe -ArgumentList "/Online","/Disable-Feature","/FeatureName:Recall","/NoRestart" -PassThru -Wait -WindowStyle Hidden
+        switch ($dism.ExitCode) {
+            0     { Write-Host "Recall feature disabled (no restart required)." -ForegroundColor Green }
+            3010  { Write-Host "Recall feature disabled. Restart required to complete." -ForegroundColor Green }
+            default {
+                Write-Host "DISM returned exit code $($dism.ExitCode). Recall may not exist on this system or disable failed." -ForegroundColor DarkYellow
+            }
+        }
+    } catch {
+        Write-Host "Failed to disable Recall feature: $_" -ForegroundColor Yellow
+    }
+
+    Write-Host ""
+    Write-Host "Telemetry tweaks complete. A restart is recommended to fully apply changes." -ForegroundColor Cyan
+    Pause
+}
 
 # --- Main Menu Loop ---
 
@@ -1147,12 +1361,13 @@ do {
                 $choice = $null
                 while ($null -eq $choice) {
                     $input = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").Character
-                    if ($input -match '^[0-1]$') {
+                    if ($input -match '^[0-2]$') {
                         $choice = $input
                     }
                 }
                 switch ($choice) {
-                    "1" { Open-DiskManager }
+                    "1" { Set-ServicesRecommended }
+                    "2" { Disable-Telemetry }
                     "0" { $exitMenu = $true }
                 }
             } while (-not $exitMenu)
