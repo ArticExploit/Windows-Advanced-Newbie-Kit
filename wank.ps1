@@ -54,10 +54,9 @@ function Show-MainMenu {
     Write-Host "   [2] System"
     Write-Host "   [3] Printer"
     Write-Host "   [4] Disk"
-    Write-Host "   [5] Debloat"
     Write-Host "   [0] Exit"
     Write-Host ""
-    Write-Host "Choose a menu option using your keyboard [1-5,0] : " -NoNewline
+    Write-Host "Choose a menu option using your keyboard [1-4,0] : " -NoNewline
 }
 
 function Show-NetworkMenu {
@@ -80,9 +79,10 @@ function Show-SystemMenu {
     Write-Host "   [4] Reset Windows Update"
     Write-Host "   [5] Force Time Sync"
     Write-Host "   [6] Create and Open Battery Report"
+    Write-Host "   [7] Set Services to Recommended Startup"
     Write-Host "   [0] Back"
     Write-Host ""
-    Write-Host "Choose a menu option using your keyboard [1-6,0] : " -NoNewline
+    Write-Host "Choose a menu option using your keyboard [1-8,0] : " -NoNewline
 }
 
 function Show-PrinterMenu {
@@ -103,16 +103,6 @@ function Show-DiskMenu {
     Write-Host "   [0] Back"
     Write-Host ""
     Write-Host "Choose a menu option using your keyboard [1-4,0] : " -NoNewline
-}
-
-# Debloat menu UI only (calls to functions remain external)
-function Show-DebloatMenu {
-    Show-Header "Debloat"
-    Write-Host "   [1] Set Services to Recommended Startup"
-    Write-Host "   [2] Disable Telemetry"
-    Write-Host "   [0] Back"
-    Write-Host ""
-    Write-Host "Choose a menu option using your keyboard [1-2,0] : " -NoNewline
 }
 
 function Set-ServicesRecommended {
@@ -407,7 +397,7 @@ function Set-ServicesRecommended {
     foreach ($svc in $services) {
         $name = $svc.Name
         $type = $svc.StartupType
-
+    
         # Handle wildcard services (like Service_*)
         if ($name -like "*_*") {
             $base = $name.Substring(0, $name.IndexOf("_*"))
@@ -434,144 +424,6 @@ function Set-ServicesRecommended {
     Pause
 }
 
-function Disable-Telemetry {
-    Write-Host ""
-    Write-Host "Disabling telemetry & related items (best-effort)..." -ForegroundColor Yellow
-
-    $confirm = Confirm-YesNo -Prompt "This will attempt multiple system changes (BCD, Task Manager prefs, registry removals, Defender sample submission setting). Continue?" -DefaultYes:$false
-    if (-not $confirm) {
-        Write-Host "Operation cancelled." -ForegroundColor DarkYellow
-        Pause
-        return
-    }
-
-    try {
-        # Set BCD bootmenupolicy to Legacy (best effort; requires admin)
-        try {
-            bcdedit /set {current} bootmenupolicy Legacy 2>$null | Out-Null
-            Write-Host "bcdedit: set bootmenupolicy to Legacy (if supported)." -ForegroundColor Green
-        } catch {
-            Write-Host "bcdedit change failed or not supported on this system: $_" -ForegroundColor DarkYellow
-        }
-
-        # If OS build less than 22557, attempt Task Manager Preferences tweak
-        try {
-            $currBuildVal = (Get-ItemProperty -Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion" -Name CurrentBuild -ErrorAction Stop).CurrentBuild
-            $currBuild = 0
-            if ($currBuildVal) { [int]::TryParse($currBuildVal.ToString(), [ref]$currBuild) | Out-Null }
-            if ($currBuild -gt 0 -and $currBuild -lt 22557) {
-                Write-Host "Applying Task Manager preferences tweak for builds < 22557..." -ForegroundColor Yellow
-                $taskmgr = Start-Process -WindowStyle Hidden -FilePath taskmgr.exe -PassThru
-                try {
-                    $preferences = $null
-                    $maxWait = 30   # seconds
-                    $elapsed = 0
-                    while (-not $preferences -and $elapsed -lt $maxWait) {
-                        Start-Sleep -Milliseconds 250
-                        $preferences = Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\TaskManager" -Name "Preferences" -ErrorAction SilentlyContinue
-                        $elapsed += 0.25
-                    }
-
-                    if ($preferences -and $preferences.Preferences) {
-                        # Set index 28 to 0 as provided
-                        $prefsBytes = $preferences.Preferences
-                        if ($prefsBytes.Length -gt 28) {
-                            $prefsBytes[28] = 0
-                            Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\TaskManager" -Name "Preferences" -Type Binary -Value $prefsBytes -ErrorAction Stop
-                            Write-Host "Task Manager preferences updated." -ForegroundColor Green
-                        } else {
-                            Write-Host "Task Manager Preferences binary smaller than expected; skipping modification." -ForegroundColor DarkYellow
-                        }
-                    } else {
-                        Write-Host "Could not read Task Manager Preferences within timeout; skipping." -ForegroundColor DarkYellow
-                    }
-                } finally {
-                    if ($taskmgr -and -not $taskmgr.HasExited) { Stop-Process -Id $taskmgr.Id -ErrorAction SilentlyContinue }
-                }
-            } else {
-                Write-Host "Task Manager tweak not required for this build ($currBuild)." -ForegroundColor DarkGray
-            }
-        } catch {
-            Write-Host "Task Manager tweak encountered an error: $_" -ForegroundColor DarkYellow
-        }
-
-        # Remove "3D Objects" or related namespace from This PC (best-effort)
-        try {
-            Remove-Item -Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\MyComputer\NameSpace\{0DB7E03F-FC29-4DC6-9020-FF41B59E513A}" -Recurse -ErrorAction SilentlyContinue
-            Write-Host "Removed MyComputer NameSpace GUID entry (if present)." -ForegroundColor Green
-        } catch {
-            Write-Host "Failed removing NameSpace GUID (may not exist): $_" -ForegroundColor DarkYellow
-        }
-
-        # Remove Edge 'Managed by your organization' policy key if present
-        try {
-            if (Test-Path "HKLM:\SOFTWARE\Policies\Microsoft\Edge") {
-                Remove-Item -Path "HKLM:\SOFTWARE\Policies\Microsoft\Edge" -Recurse -Force -ErrorAction SilentlyContinue
-                Write-Host "Removed Edge policy registry key." -ForegroundColor Green
-            } else {
-                Write-Host "No Edge policy key found." -ForegroundColor DarkGray
-            }
-        } catch {
-            Write-Host "Failed to remove Edge policy key: $_" -ForegroundColor DarkYellow
-        }
-
-        # Group svchost.exe processes threshold - set SvcHostSplitThresholdInKB to total RAM in KB
-        try {
-            $ramBytes = (Get-CimInstance -ClassName Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum -ErrorAction SilentlyContinue).Sum
-            if ($ramBytes -and $ramBytes -gt 0) {
-                $ramKB = [math]::Floor($ramBytes / 1KB)
-                Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control" -Name "SvcHostSplitThresholdInKB" -Type DWord -Value $ramKB -Force -ErrorAction SilentlyContinue
-                Write-Host "Set SvcHostSplitThresholdInKB to $ramKB." -ForegroundColor Green
-            } else {
-                Write-Host "Could not determine total RAM; skipping SvcHostSplitThresholdInKB." -ForegroundColor DarkYellow
-            }
-        } catch {
-            Write-Host "Failed to set SvcHostSplitThresholdInKB: $_" -ForegroundColor DarkYellow
-        }
-
-        # Disable DiagTrack AutoLogger and deny SYSTEM access to AutoLogger dir (best-effort)
-        try {
-            $autoLoggerDir = "$env:PROGRAMDATA\Microsoft\Diagnosis\ETLLogs\AutoLogger"
-            $diagFile = Join-Path $autoLoggerDir "AutoLogger-Diagtrack-Listener.etl"
-            if (Test-Path $diagFile) {
-                Remove-Item -Path $diagFile -Force -ErrorAction SilentlyContinue
-                Write-Host "Removed AutoLogger file $diagFile." -ForegroundColor Green
-            } else {
-                Write-Host "AutoLogger file not present." -ForegroundColor DarkGray
-            }
-
-            if (Test-Path $autoLoggerDir) {
-                try {
-                    & icacls $autoLoggerDir "/deny" "SYSTEM:(OI)(CI)F" 2>$null | Out-Null
-                    Write-Host "Applied icacls deny for SYSTEM on AutoLogger dir (best-effort)." -ForegroundColor Green
-                } catch {
-                    Write-Host "icacls invocation failed or not permitted: $_" -ForegroundColor DarkYellow
-                }
-            }
-        } catch {
-            Write-Host "AutoLogger/ICACLS step failed: $_" -ForegroundColor DarkYellow
-        }
-
-        # Disable Defender Auto Sample Submission (best-effort)
-        try {
-            if (Get-Command Set-MpPreference -ErrorAction SilentlyContinue) {
-                Set-MpPreference -SubmitSamplesConsent 2 -ErrorAction SilentlyContinue | Out-Null
-                Write-Host "Set Defender SubmitSamplesConsent to 2 (Block) where supported." -ForegroundColor Green
-            } else {
-                Write-Host "Set-MpPreference not available on this system; skipping Defender sample submission change." -ForegroundColor DarkGray
-            }
-        } catch {
-            Write-Host "Failed to modify Defender preference: $_" -ForegroundColor DarkYellow
-        }
-
-        Write-Host ""
-        Write-Host "Telemetry disable steps completed (best-effort)." -ForegroundColor Cyan
-    } catch {
-        Write-Host "An error occurred while attempting to disable telemetry: $_" -ForegroundColor Red
-    }
-
-    Pause
-}
 
 function Get-DefaultExportFolder {
     <#
@@ -1193,7 +1045,7 @@ do {
     $mainChoice = $null
     while ($null -eq $mainChoice) {
         $input = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").Character
-        if ($input -match '^[0-5]$') {
+        if ($input -match '^[0-4]$') {
             $mainChoice = $input
         }
     }
@@ -1226,7 +1078,7 @@ do {
                 $choice = $null
                 while ($null -eq $choice) {
                     $input = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").Character
-                    if ($input -match '^[0-6]$') {
+                    if ($input -match '^[0-7]$') {
                         $choice = $input
                     }
                 }
@@ -1237,6 +1089,7 @@ do {
                     "4" { Reset-WindowsUpdate }
                     "5" { Force-TimeSync }
                     "6" { Create-BatteryReport }
+                    "7" { Set-ServicesRecommended }
                     "0" { $exitMenu = $true }
                 }
             } while (-not $exitMenu)
@@ -1275,24 +1128,6 @@ do {
                     "2" { Show-DiskSpace }
                     "3" { Run-DiskCleanup }
                     "4" { Clean-TempFiles }
-                    "0" { $exitMenu = $true }
-                }
-            } while (-not $exitMenu)
-        }
-        "5" { # Debloat
-            $exitMenu = $false
-            do {
-                Show-DebloatMenu
-                $choice = $null
-                while ($null -eq $choice) {
-                    $input = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").Character
-                    if ($input -match '^[0-2]$') {
-                        $choice = $input
-                    }
-                }
-                switch ($choice) {
-                    "1" { Set-ServicesRecommended }
-                    "2" { Disable-Telemetry }
                     "0" { $exitMenu = $true }
                 }
             } while (-not $exitMenu)
