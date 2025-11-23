@@ -5,6 +5,11 @@ Either download the one of the files and run those or use this command on powers
 ```
 irm https://wank.artic.sh | iex
 ```
+### Powershell Script
+If you're going to run the powershell script by directly downloading it, consider running this command in PowerShell with Admin priviledges first, to allow for it to run properly.
+```
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Bypass -Force
+```
 
 ## TO DO
 - Create Restore Point
