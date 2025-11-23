@@ -100,9 +100,10 @@ function Show-DiskMenu {
     Write-Host "   [2] Show Disk Space"
     Write-Host "   [3] Run Disk Cleanup"
     Write-Host "   [4] Clean Temporary Files"
+    Write-Host "   [5] MBR to GPT Converter"
     Write-Host "   [0] Back"
     Write-Host ""
-    Write-Host "Choose a menu option using your keyboard [1-4,0] : " -NoNewline
+    Write-Host "Choose a menu option using your keyboard [1-5,0] : " -NoNewline
 }
 
 function Show-DebloatMenu {
@@ -1413,6 +1414,167 @@ function Set-EdgePolicies {
     if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
 }
 
+function Invoke-Mbr2Gpt {
+    [CmdletBinding()]
+    param(
+        [int]$DiskNumber,
+        [switch]$ValidateOnly
+    )
+
+    Write-Host ""
+    Write-Host "MBR2GPT helper - validate and convert the OS disk from MBR to GPT" -ForegroundColor Cyan
+
+    # Use existing Confirm-YesNo if your script defined it; otherwise add a local fallback.
+    if (-not (Get-Command Confirm-YesNo -ErrorAction SilentlyContinue)) {
+        function Confirm-YesNo([string]$Prompt, [bool]$DefaultYes=$true) {
+            $suffix = if ($DefaultYes) { " [Y/n]" } else { " [y/N]" }
+            while ($true) {
+                Write-Host "$Prompt$suffix " -NoNewline -ForegroundColor Yellow
+                $resp = Read-Host
+                if ([string]::IsNullOrWhiteSpace($resp)) { return $DefaultYes }
+                switch ($resp.Trim().ToLowerInvariant()) {
+                    "y" { return $true }
+                    "yes" { return $true }
+                    "n" { return $false }
+                    "no" { return $false }
+                    default { Write-Host "Please answer 'y' or 'n'." -ForegroundColor DarkYellow }
+                }
+            }
+        }
+    }
+
+    # Resolve mbr2gpt.exe path (handle 32-bit/64-bit PS)
+    $mbr2gpt = Join-Path $env:SystemRoot "System32\mbr2gpt.exe"
+    if (-not (Test-Path $mbr2gpt)) {
+        $mbr2gpt = Join-Path $env:SystemRoot "Sysnative\mbr2gpt.exe"
+    }
+    if (-not (Test-Path $mbr2gpt)) {
+        Write-Host "mbr2gpt.exe not found. This tool requires Windows 10/Server 2019 or later." -ForegroundColor Red
+        if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
+        return
+    }
+
+    # Determine OS disk if not provided
+    try {
+        if (-not $PSBoundParameters.ContainsKey('DiskNumber')) {
+            $sysDrive = ($env:SystemDrive).TrimEnd('\').TrimEnd(':').TrimStart('\')
+            $osPart = Get-Partition -DriveLetter $sysDrive -ErrorAction Stop
+            $osDisk = (Get-Disk -Number $osPart.DiskNumber -ErrorAction Stop)
+            $DiskNumber = $osDisk.Number
+        }
+    } catch {
+        Write-Host "Failed to resolve OS disk automatically. Specify -DiskNumber explicitly." -ForegroundColor Red
+        if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
+        return
+    }
+
+    # Fetch disk details
+    try {
+        $disk = Get-Disk -Number $DiskNumber -ErrorAction Stop
+    } catch {
+        Write-Host "Disk $DiskNumber not found: $_" -ForegroundColor Red
+        if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
+        return
+    }
+
+    # Show summary
+    $sizeGB = [math]::Round($disk.Size/1GB,2)
+    Write-Host "Target Disk : #$($disk.Number)  $($disk.FriendlyName)  Size: ${sizeGB}GB" -ForegroundColor Gray
+    Write-Host "Part. Style : $($disk.PartitionStyle)" -ForegroundColor Gray
+
+    if ($disk.PartitionStyle -eq 'GPT') {
+        Write-Host "This disk is already GPT. Nothing to do." -ForegroundColor Yellow
+        if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
+        return
+    }
+    if ($disk.PartitionStyle -ne 'MBR') {
+        Write-Host "Unsupported partition style: $($disk.PartitionStyle). Aborting." -ForegroundColor Red
+        if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
+        return
+    }
+
+    # Suggest suspending BitLocker if enabled on OS volume
+    $bitlockerSuspended = $false
+    try {
+        if (Get-Command Get-BitLockerVolume -ErrorAction SilentlyContinue) {
+            $osVol = Get-BitLockerVolume -MountPoint $env:SystemDrive -ErrorAction SilentlyContinue
+            if ($osVol -and $osVol.ProtectionStatus -eq 'On') {
+                $choice = Confirm-YesNo -Prompt "BitLocker is enabled on $($env:SystemDrive). Suspend BitLocker before validate/convert?" -DefaultYes:$true
+                if ($choice) {
+                    try {
+                        Suspend-BitLocker -MountPoint $env:SystemDrive -RebootCount 1 -ErrorAction Stop | Out-Null
+                        $bitlockerSuspended = $true
+                        Write-Host "BitLocker protection suspended (will auto-resume in 1 reboot)." -ForegroundColor Green
+                    } catch {
+                        Write-Host "Failed to suspend BitLocker: $_" -ForegroundColor Yellow
+                    }
+                } else {
+                    Write-Host "Continuing without suspending BitLocker." -ForegroundColor DarkYellow
+                }
+            }
+        }
+    } catch {}
+
+    # Validate conversion
+    Write-Host ""
+    Write-Host "Running validation: mbr2gpt /validate /disk:$DiskNumber /allowFullOS" -ForegroundColor Cyan
+    try {
+        $null = & $mbr2gpt /validate /disk:$DiskNumber /allowFullOS 2>&1 | ForEach-Object { $_; }
+        $validateExit = $LASTEXITCODE
+    } catch {
+        $validateExit = 1
+    }
+
+    if ($validateExit -ne 0) {
+        Write-Host "Validation failed (exit code $validateExit). Review mbr2gpt output above." -ForegroundColor Red
+        if ($bitlockerSuspended) {
+            Write-Host "Reminder: BitLocker was suspended and will auto-resume after one reboot." -ForegroundColor DarkGray
+        }
+        if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
+        return
+    } else {
+        Write-Host "Validation passed." -ForegroundColor Green
+    }
+
+    if ($ValidateOnly) {
+        Write-Host "ValidateOnly requested. No changes made." -ForegroundColor Yellow
+        if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
+        return
+    }
+
+    # Confirm conversion
+    Write-Host ""
+    $confirm = Confirm-YesNo -Prompt "Proceed with conversion to GPT now? The system will require firmware switch to UEFI and a reboot." -DefaultYes:$false
+    if (-not $confirm) {
+        Write-Host "User cancelled conversion." -ForegroundColor Yellow
+        if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
+        return
+    }
+
+    # Convert
+    Write-Host "Starting conversion: mbr2gpt /convert /disk:$DiskNumber /allowFullOS" -ForegroundColor Cyan
+    try {
+        $null = & $mbr2gpt /convert /disk:$DiskNumber /allowFullOS 2>&1 | ForEach-Object { $_; }
+        $convertExit = $LASTEXITCODE
+    } catch {
+        $convertExit = 1
+    }
+
+    if ($convertExit -eq 0) {
+        Write-Host "Conversion completed successfully." -ForegroundColor Green
+        Write-Host "Next steps:" -ForegroundColor Cyan
+        Write-Host "  1) Reboot the PC." -ForegroundColor Gray
+        Write-Host "  2) Enter firmware setup and switch boot mode to UEFI (disable Legacy/CSM)." -ForegroundColor Gray
+        Write-Host "  3) Ensure the new Windows Boot Manager (UEFI) entry is first in boot order." -ForegroundColor Gray
+        Write-Host "Note: If BitLocker was suspended, it will resume after one reboot." -ForegroundColor DarkGray
+    } elseif ($convertExit -eq 2) {
+        Write-Host "Conversion failed: Disk layout not eligible (exit 2). See output above." -ForegroundColor Red
+    } else {
+        Write-Host "Conversion failed with exit code $convertExit. See output above for details." -ForegroundColor Red
+    }
+
+    if (Get-Command Pause -ErrorAction SilentlyContinue) { Pause }
+}
 
 # --- Main Menu Loop ---
 
@@ -1495,7 +1657,7 @@ do {
                 $choice = $null
                 while ($null -eq $choice) {
                     $input = $host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown").Character
-                    if ($input -match '^[0-4]$') {
+                    if ($input -match '^[0-5]$') {
                         $choice = $input
                     }
                 }
@@ -1504,6 +1666,7 @@ do {
                     "2" { Show-DiskSpace }
                     "3" { Run-DiskCleanup }
                     "4" { Clean-TempFiles }
+                    "5" { Invoke-Mbr2Gpt }
                     "0" { $exitMenu = $true }
                 }
             } while (-not $exitMenu)
